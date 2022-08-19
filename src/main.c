@@ -1,5 +1,6 @@
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <SDL2/SDL.h>
 #include "embedded.h"
 
@@ -16,7 +17,28 @@ int main(void)
 	SDL_Window* window = SDL_CreateWindow("Pyea",
 		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 800, 0);
 
-	SDL_Delay(1000);
+	bool running = true;
+	while (running)
+	{
+		SDL_Event event;
+		while (SDL_PollEvent(&event))
+		{
+			switch (event.type)
+			{
+				case SDL_QUIT:
+					running = false;
+				break;
+				case SDL_KEYDOWN:
+					switch (event.key.keysym.sym)
+					{
+						case SDLK_ESCAPE:
+							running = false;
+						break;
+					}
+				break;
+			}
+		}
+	}
 
 	SDL_DestroyWindow(window);
 	SDL_Quit(); 
