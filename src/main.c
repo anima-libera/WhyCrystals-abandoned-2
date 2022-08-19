@@ -19,7 +19,8 @@ struct cell_t
 };
 typedef struct cell_t cell_t;
 
-void draw_cell(SDL_Renderer* renderer, cell_t const* cell, int x, int y, int side)
+void draw_cell(SDL_Renderer* renderer, cell_t const* cell, int x, int y, int side,
+	bool is_hovered, bool is_selected)
 {
 	SDL_Rect rect = {.x = x, .y = y, .w = side, .h = side};
 	switch (cell->floor)
@@ -35,6 +36,16 @@ void draw_cell(SDL_Renderer* renderer, cell_t const* cell, int x, int y, int sid
 		break;
 	}
 	SDL_RenderFillRect(renderer, &rect);
+	if (is_selected)
+	{
+		SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+		SDL_RenderDrawRect(renderer, &rect);
+	}
+	else if (is_hovered)
+	{
+		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+		SDL_RenderDrawRect(renderer, &rect);
+	}
 
 	if (cell->has_mountain)
 	{
@@ -44,6 +55,16 @@ void draw_cell(SDL_Renderer* renderer, cell_t const* cell, int x, int y, int sid
 		rect.w -= 8;
 		rect.h -= 2;
 		SDL_RenderFillRect(renderer, &rect);
+		if (is_selected)
+		{
+			SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+			SDL_RenderDrawRect(renderer, &rect);
+		}
+		else if (is_hovered)
+		{
+			SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+			SDL_RenderDrawRect(renderer, &rect);
+		}
 	}
 }
 
@@ -91,6 +112,10 @@ int main(void)
 		}
 	}
 
+	int mouse_pixel_x = -1, mouse_pixel_y = -1;
+	int hovered_cell_x = -1, hovered_cell_y = -1;
+	int selected_cell_x = -1, selected_cell_y = -1;
+
 	bool running = true;
 	while (running)
 	{
@@ -110,23 +135,24 @@ int main(void)
 						break;
 					}
 				break;
+				case SDL_MOUSEMOTION:
+					mouse_pixel_x = event.motion.x;
+					mouse_pixel_y = event.motion.y;
+					hovered_cell_x = mouse_pixel_x / CELL_SIDE_PIXELS;
+					hovered_cell_y = mouse_pixel_y / CELL_SIDE_PIXELS;
+				break;
+				case SDL_MOUSEBUTTONDOWN:
+					if (event.button.button == SDL_BUTTON_LEFT)
+					{
+						selected_cell_x = hovered_cell_x;
+						selected_cell_y = hovered_cell_y;
+					}
+				break;
 			}
 		}
 
 		SDL_SetRenderDrawColor(renderer, 30, 40, 80, 255);
 		SDL_RenderClear(renderer);
-
-		#if 0
-		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-		for (int x = 0; x < 800; x += 40)
-		{
-			SDL_RenderDrawLine(renderer, x, 0, x, 800);
-		}
-		for (int y = 0; y < 800; y += 40)
-		{
-			SDL_RenderDrawLine(renderer, 0, y, 800, y);
-		}
-		#endif
 
 		for (int y = 0; y < GRID_SIDE; y++)
 		for (int x = 0; x < GRID_SIDE; x++)
@@ -134,7 +160,10 @@ int main(void)
 			cell_t const* cell = &grid[y * GRID_SIDE + x];
 			int const pixel_x = x * CELL_SIDE_PIXELS;
 			int const pixel_y = y * CELL_SIDE_PIXELS;
-			draw_cell(renderer, cell, pixel_x, pixel_y, CELL_SIDE_PIXELS);
+			bool const is_hovered = x == hovered_cell_x && y == hovered_cell_y;
+			bool const is_selected = x == selected_cell_x && y == selected_cell_y;
+			draw_cell(renderer, cell, pixel_x, pixel_y, CELL_SIDE_PIXELS,
+				is_hovered, is_selected);
 		}
 
 		SDL_RenderPresent(renderer);
