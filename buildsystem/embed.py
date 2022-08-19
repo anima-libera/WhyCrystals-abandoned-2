@@ -1,10 +1,10 @@
 
-""" Content embedding via the generation of a c source file.
+""" Content embedding via the generation of a C source file.
 
 The header file at `get_embedded_header_file_path()` is allowed special variable declarations
 via the magic macro `EMBEDDED`. These declarations are in fact requests to the buildsystem
 to embed the content of some files (specified in the macro calls) into the executable,
-as definitions of the declared variables. It is done by generating the c file at
+as definitions of the declared variables. It is done by generating the C file at
 `get_embedded_c_file_path()` with definitions of these variables initialized to the
 content of the specified files.
 """
@@ -72,8 +72,7 @@ def generate_c(files_to_embed: List[FileToEmbed]) -> str:
 		generated_c.append(f"/* {what} of \"{file_to_embed.file_path}\". */")
 		variable_declaration = file_to_embed.variable_declaration
 		escaped_content = file_to_embed.get_espaced_content()
-		# The `extern` here is needed as const variables have internal linkage by default in C++.
-		generated_c.append(f"extern {variable_declaration} = {escaped_content};")
+		generated_c.append(f"{variable_declaration} = {escaped_content};")
 	generated_c.append("")
 	return "\n".join(generated_c)
 
@@ -82,9 +81,9 @@ def handle_embedding() -> None:
 	is synchronized with the said files. """
 
 	embedded_c_file_path = get_embedded_c_file_path()
-	# Comparing the dates of the header and of the files to embed to the date of the generated c
-	# will tell if changes in that c file (new embedding) are required or not.
-	# If none of these is more recent that the c file, then nothing has changed here.
+	# Comparing the dates of the header and of the files to embed to the date of the generated C
+	# will tell if changes in that C file (new embedding) are required or not.
+	# If none of these is more recent that the C file, then nothing has changed here.
 	if os.path.isfile(embedded_c_file_path):
 		embedded_c_date = os.path.getmtime(embedded_c_file_path)
 	else:

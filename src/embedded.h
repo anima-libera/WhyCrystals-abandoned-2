@@ -19,4 +19,7 @@
 
 EMBEDDED("../assets/test", TEXT) char const g_asset_test[];
 
+EMBEDDED("../assets/sprite_sheet.png", BINARY) unsigned char const g_asset_sprite_sheet_png[];
+EMBEDDED("../assets/sprite_sheet.png", SIZE) unsigned int const g_asset_sprite_sheet_png_size;
+
 #endif /* PYEA_HEADER_EMBEDDED_ */

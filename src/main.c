@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include "embedded.h"
 
 enum floor_type_t
@@ -139,7 +140,22 @@ int main(void)
 		exit(-1);
 	}
 
+	if (IMG_Init(IMG_INIT_PNG) != IMG_INIT_PNG)
+	{
+		printf("TODO: Handle error.\n");
+		exit(-1);
+	}
+
 	#define CELL_SIDE_PIXELS 40
+
+	SDL_Surface* sprite_sheet_surface = IMG_LoadPNG_RW(SDL_RWFromConstMem(
+		g_asset_sprite_sheet_png, g_asset_sprite_sheet_png_size));
+	SDL_Texture* sprite_sheet_texture = SDL_CreateTextureFromSurface(renderer,
+		sprite_sheet_surface);
+	SDL_FreeSurface(sprite_sheet_surface);
+	SDL_Rect sprite_sheet_rect = {.w = 16, .h = 16};
+	SDL_Rect sprite_rect = {.w = CELL_SIDE_PIXELS, .h = CELL_SIDE_PIXELS};
+	
 	#define GRID_SIDE (800 / CELL_SIDE_PIXELS)
 	cell_t grid[GRID_SIDE * GRID_SIDE] = {0};
 
@@ -259,9 +275,17 @@ int main(void)
 				is_hovered, is_selected);
 		}
 
+		sprite_sheet_rect.x = 0;
+		sprite_sheet_rect.y = 0;
+		sprite_rect.x = CELL_SIDE_PIXELS * ((800 / CELL_SIDE_PIXELS) / 2);
+		sprite_rect.y = CELL_SIDE_PIXELS * ((800 / CELL_SIDE_PIXELS) / 2 - 1);
+		SDL_RenderCopy(renderer, sprite_sheet_texture, &sprite_sheet_rect, &sprite_rect);
+
 		SDL_RenderPresent(renderer);
 	}
 
+	IMG_Quit(); 
+	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit(); 
 
