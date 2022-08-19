@@ -1,5 +1,7 @@
 
 #include <stdio.h>
+#include <assert.h>
+#include <math.h>
 #include <stdbool.h>
 #include <SDL2/SDL.h>
 #include "embedded.h"
@@ -12,10 +14,66 @@ enum floor_type_t
 };
 typedef enum floor_type_t floor_type_t;
 
+enum object_t
+{
+	OBJECT_NONE,
+	OBJECT_ROCK,
+	OBJECT_UNIT_CONTROLLED,
+	OBJECT_UNIT_ENEMY,
+};
+typedef enum object_t object_t;
+
+void draw_object(SDL_Renderer* renderer, object_t const* object, int x, int y, int side,
+	bool is_hovered, bool is_selected)
+{
+	if (*object == OBJECT_NONE)
+	{
+		return;
+	}
+
+	SDL_Rect rect = {.x = x, .y = y, .w = side, .h = side};
+	switch (*object)
+	{
+		case OBJECT_ROCK:
+			SDL_SetRenderDrawColor(renderer, 80, 80, 0, 255);
+			rect.x += 4;
+			rect.y -= 2;
+			rect.w -= 8;
+			rect.h -= 2;
+		break;
+		case OBJECT_UNIT_CONTROLLED:
+			SDL_SetRenderDrawColor(renderer, 0, 0, 160, 255);
+			rect.x += 10;
+			rect.y += 5;
+			rect.w -= 20;
+			rect.h -= 10;
+		break;
+		case OBJECT_UNIT_ENEMY:
+			SDL_SetRenderDrawColor(renderer, 160, 0, 0, 255);
+			rect.x += 10;
+			rect.y += 5;
+			rect.w -= 20;
+			rect.h -= 10;
+		break;
+	}
+	SDL_RenderFillRect(renderer, &rect);
+	if (is_selected)
+	{
+		SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+		SDL_RenderDrawRect(renderer, &rect);
+	}
+	else if (is_hovered)
+	{
+		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+		SDL_RenderDrawRect(renderer, &rect);
+	}
+}
+
 struct cell_t
 {
 	floor_type_t floor;
-	bool has_mountain;
+	object_t object;
+	bool is_green;
 };
 typedef struct cell_t cell_t;
 
@@ -46,26 +104,13 @@ void draw_cell(SDL_Renderer* renderer, cell_t const* cell, int x, int y, int sid
 		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 		SDL_RenderDrawRect(renderer, &rect);
 	}
-
-	if (cell->has_mountain)
+	else if (cell->is_green)
 	{
-		SDL_SetRenderDrawColor(renderer, 80, 80, 0, 255);
-		rect.x += 4;
-		rect.y -= 2;
-		rect.w -= 8;
-		rect.h -= 2;
-		SDL_RenderFillRect(renderer, &rect);
-		if (is_selected)
-		{
-			SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-			SDL_RenderDrawRect(renderer, &rect);
-		}
-		else if (is_hovered)
-		{
-			SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-			SDL_RenderDrawRect(renderer, &rect);
-		}
+		SDL_SetRenderDrawColor(renderer, 100, 255, 0, 255);
+		SDL_RenderDrawRect(renderer, &rect);
 	}
+
+	draw_object(renderer, &cell->object, x, y, side, is_hovered, is_selected);
 }
 
 int main(void)
@@ -106,11 +151,20 @@ int main(void)
 			grid[y * GRID_SIDE + x].floor = FLOOR_DESERT;
 		}
 
+		if (((x - 2) ^ (y + 2)) % 31 == 1)
+		{
+			grid[y * GRID_SIDE + x].object = OBJECT_UNIT_ENEMY;
+		}
 		if ((x ^ (y + 3)) % 13 == 3)
 		{
-			grid[y * GRID_SIDE + x].has_mountain = true;
+			grid[y * GRID_SIDE + x].object = OBJECT_ROCK;
 		}
+
 	}
+
+	grid[(GRID_SIDE / 2) * GRID_SIDE + (GRID_SIDE / 2)].object = OBJECT_UNIT_CONTROLLED;
+	grid[(GRID_SIDE / 2) * GRID_SIDE + (GRID_SIDE / 2 - 1)].object = OBJECT_UNIT_CONTROLLED;
+	grid[(GRID_SIDE / 2) * GRID_SIDE + (GRID_SIDE / 2 - 2)].object = OBJECT_UNIT_CONTROLLED;
 
 	int mouse_pixel_x = -1, mouse_pixel_y = -1;
 	int hovered_cell_x = -1, hovered_cell_y = -1;
@@ -144,8 +198,47 @@ int main(void)
 				case SDL_MOUSEBUTTONDOWN:
 					if (event.button.button == SDL_BUTTON_LEFT)
 					{
+						int const old_selected_cell_x = selected_cell_x;
+						int const old_selected_cell_y = selected_cell_y;
 						selected_cell_x = hovered_cell_x;
 						selected_cell_y = hovered_cell_y;
+						cell_t* selected_cell =
+							&grid[selected_cell_y * GRID_SIDE + selected_cell_x];
+						if (selected_cell->is_green)
+						{
+							cell_t* old_selected_cell =
+								&grid[old_selected_cell_y * GRID_SIDE + old_selected_cell_x];
+							assert(old_selected_cell->object == OBJECT_UNIT_CONTROLLED);
+							old_selected_cell->object = OBJECT_NONE;
+							selected_cell->object = OBJECT_UNIT_CONTROLLED;
+							for (int y = 0; y < GRID_SIDE; y++)
+							for (int x = 0; x < GRID_SIDE; x++)
+							{
+								grid[y * GRID_SIDE + x].is_green = false;
+							}
+							break;
+						}
+						for (int y = 0; y < GRID_SIDE; y++)
+						for (int x = 0; x < GRID_SIDE; x++)
+						{
+							grid[y * GRID_SIDE + x].is_green = false;
+						}
+						if (selected_cell->object == OBJECT_UNIT_CONTROLLED)
+						{
+							for (int y = 0; y < GRID_SIDE; y++)
+							for (int x = 0; x < GRID_SIDE; x++)
+							{
+								int const dist_x = abs(x - selected_cell_x);
+								int const dist_y = abs(y - selected_cell_y);
+								int const dist = dist_x + dist_y;
+								bool is_accessible = dist != 0 && dist <= 2;
+								if (grid[y * GRID_SIDE + x].object != OBJECT_NONE)
+								{
+									is_accessible = false;
+								}
+								grid[y * GRID_SIDE + x].is_green = is_accessible;
+							}
+						}
 					}
 				break;
 			}
