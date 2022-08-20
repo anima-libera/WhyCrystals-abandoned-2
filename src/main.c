@@ -7,7 +7,8 @@
 #include <SDL2/SDL_image.h>
 #include "embedded.h"
 
-#define CELL_SIDE_PIXELS 40
+#define CELL_SIDE_PIXELS 64
+#define WINDOW_SIDE (800 - 800 % CELL_SIDE_PIXELS)
 
 enum floor_type_t
 {
@@ -28,14 +29,12 @@ typedef enum object_t object_t;
 
 void draw_object(SDL_Renderer* renderer, object_t const* object, int x, int y, int side)
 {
-	if (*object == OBJECT_NONE)
-	{
-		return;
-	}
-
 	SDL_Rect rect = {.x = x, .y = y, .w = side, .h = side};
 	switch (*object)
 	{
+		case OBJECT_NONE:
+			return;
+		break;
 		case OBJECT_ROCK:
 			SDL_SetRenderDrawColor(renderer, 80, 80, 0, 255);
 			rect.x += 4;
@@ -92,14 +91,19 @@ void draw_cell(SDL_Renderer* renderer, cell_t const* cell, int x, int y, int sid
 		SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 		SDL_RenderDrawRect(renderer, &rect);
 	}
-	else if (cell->is_hovered)
+	else if (cell->is_hovered && !cell->is_green)
 	{
 		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 		SDL_RenderDrawRect(renderer, &rect);
 	}
-	else if (cell->is_green)
+	if (cell->is_green)
 	{
-		SDL_SetRenderDrawColor(renderer, 100, 255, 0, 255);
+		int const margin = cell->is_hovered ? 3 : 5;
+		rect.x += margin;
+		rect.y += margin;
+		rect.w -= margin * 2;
+		rect.h -= margin * 2;
+		SDL_SetRenderDrawColor(renderer, 0, 100, 0, 255);
 		SDL_RenderDrawRect(renderer, &rect);
 	}
 
@@ -229,7 +233,7 @@ int main(void)
 	}
 
 	SDL_Window* window = SDL_CreateWindow("Pyea",
-		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 800, 0);
+		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_SIDE, WINDOW_SIDE, 0);
 	if (window == NULL)
 	{
 		printf("TODO: Handle error.\n");
@@ -259,7 +263,7 @@ int main(void)
 	SDL_Rect sprite_rect = {.w = CELL_SIDE_PIXELS, .h = CELL_SIDE_PIXELS};
 	
 	map_t* map = malloc(sizeof(map_t));
-	map->grid_side = 800 / CELL_SIDE_PIXELS;
+	map->grid_side = WINDOW_SIDE / CELL_SIDE_PIXELS;
 	map->grid = calloc(map->grid_side * map->grid_side, sizeof(cell_t));
 	map_generate(map);
 
@@ -340,8 +344,8 @@ int main(void)
 
 		sprite_sheet_rect.x = 0;
 		sprite_sheet_rect.y = 0;
-		sprite_rect.x = CELL_SIDE_PIXELS * ((800 / CELL_SIDE_PIXELS) / 2);
-		sprite_rect.y = CELL_SIDE_PIXELS * ((800 / CELL_SIDE_PIXELS) / 2 - 1);
+		sprite_rect.x = CELL_SIDE_PIXELS * ((WINDOW_SIDE / CELL_SIDE_PIXELS) / 2);
+		sprite_rect.y = CELL_SIDE_PIXELS * ((WINDOW_SIDE / CELL_SIDE_PIXELS) / 2 - 1);
 		SDL_RenderCopy(renderer, sprite_sheet_texture, &sprite_sheet_rect, &sprite_rect);
 
 		SDL_RenderPresent(renderer);
