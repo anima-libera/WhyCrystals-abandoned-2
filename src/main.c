@@ -7,6 +7,8 @@
 #include <SDL2/SDL_image.h>
 #include "embedded.h"
 
+#define CELL_SIDE_PIXELS 40
+
 enum floor_type_t
 {
 	FLOOR_FIELD,
@@ -24,8 +26,7 @@ enum object_t
 };
 typedef enum object_t object_t;
 
-void draw_object(SDL_Renderer* renderer, object_t const* object, int x, int y, int side,
-	bool is_hovered, bool is_selected)
+void draw_object(SDL_Renderer* renderer, object_t const* object, int x, int y, int side)
 {
 	if (*object == OBJECT_NONE)
 	{
@@ -58,16 +59,6 @@ void draw_object(SDL_Renderer* renderer, object_t const* object, int x, int y, i
 		break;
 	}
 	SDL_RenderFillRect(renderer, &rect);
-	if (is_selected)
-	{
-		SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-		SDL_RenderDrawRect(renderer, &rect);
-	}
-	else if (is_hovered)
-	{
-		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-		SDL_RenderDrawRect(renderer, &rect);
-	}
 }
 
 struct cell_t
@@ -75,11 +66,12 @@ struct cell_t
 	floor_type_t floor;
 	object_t object;
 	bool is_green;
+	bool is_hovered;
+	bool is_selected;
 };
 typedef struct cell_t cell_t;
 
-void draw_cell(SDL_Renderer* renderer, cell_t const* cell, int x, int y, int side,
-	bool is_hovered, bool is_selected)
+void draw_cell(SDL_Renderer* renderer, cell_t const* cell, int x, int y, int side)
 {
 	SDL_Rect rect = {.x = x, .y = y, .w = side, .h = side};
 	switch (cell->floor)
@@ -95,12 +87,12 @@ void draw_cell(SDL_Renderer* renderer, cell_t const* cell, int x, int y, int sid
 		break;
 	}
 	SDL_RenderFillRect(renderer, &rect);
-	if (is_selected)
+	if (cell->is_selected)
 	{
 		SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 		SDL_RenderDrawRect(renderer, &rect);
 	}
-	else if (is_hovered)
+	else if (cell->is_hovered)
 	{
 		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 		SDL_RenderDrawRect(renderer, &rect);
@@ -111,7 +103,119 @@ void draw_cell(SDL_Renderer* renderer, cell_t const* cell, int x, int y, int sid
 		SDL_RenderDrawRect(renderer, &rect);
 	}
 
-	draw_object(renderer, &cell->object, x, y, side, is_hovered, is_selected);
+	draw_object(renderer, &cell->object, x, y, side);
+}
+
+struct map_t
+{
+	int grid_side;
+	cell_t* grid;
+};
+typedef struct map_t map_t;
+
+cell_t* map_cell(map_t* map, int x, int y)
+{
+	return &map->grid[y * map->grid_side + x];
+}
+
+void map_generate(map_t* map)
+{
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		if ((x ^ (y + 1)) % 7 == 1)
+		{
+			map_cell(map, x, y)->floor = FLOOR_DESERT;
+		}
+
+		if (((x - 2) ^ (y + 2)) % 31 == 1)
+		{
+			map_cell(map, x, y)->object = OBJECT_UNIT_ENEMY;
+		}
+		if ((x ^ (y + 3)) % 13 == 3)
+		{
+			map_cell(map, x, y)->object = OBJECT_ROCK;
+		}
+
+	}
+
+	map_cell(map, 6, 6)->object = OBJECT_UNIT_CONTROLLED;
+	map_cell(map, 7, 6)->object = OBJECT_UNIT_CONTROLLED;
+	map_cell(map, 8, 6)->object = OBJECT_UNIT_CONTROLLED;
+}
+
+void map_clear_green(map_t* map)
+{
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		map_cell(map, x, y)->is_green = false;
+	}
+}
+
+void map_clear_hovered(map_t* map)
+{
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		map_cell(map, x, y)->is_hovered = false;
+	}
+}
+
+void map_clear_selected(map_t* map)
+{
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		map_cell(map, x, y)->is_selected = false;
+	}
+}
+
+cell_t* map_cell_from_pixel(map_t* map, int pixel_x, int pixel_y)
+{
+	return map_cell(map,
+		pixel_x / CELL_SIDE_PIXELS, pixel_y / CELL_SIDE_PIXELS);
+}
+
+cell_t* map_hovered_cell(map_t* map)
+{
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		cell_t* cell = map_cell(map, x, y);
+		if (cell->is_hovered)
+		{
+			return cell;
+		}
+	}
+	return NULL;
+}
+
+cell_t* map_selected_cell(map_t* map)
+{
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		cell_t* cell = map_cell(map, x, y);
+		if (cell->is_selected)
+		{
+			return cell;
+		}
+	}
+	return NULL;
+}
+
+void map_cell_coords(map_t* map, cell_t* cell, int* out_x, int* out_y)
+{
+	int cell_offset = cell - map->grid;
+	if (out_x != NULL)
+	{
+		*out_x = cell_offset % map->grid_side;
+	}
+	if (out_y != NULL)
+	{
+		*out_y = cell_offset / map->grid_side;
+	}
 }
 
 int main(void)
@@ -146,8 +250,6 @@ int main(void)
 		exit(-1);
 	}
 
-	#define CELL_SIDE_PIXELS 40
-
 	SDL_Surface* sprite_sheet_surface = IMG_LoadPNG_RW(SDL_RWFromConstMem(
 		g_asset_sprite_sheet_png, g_asset_sprite_sheet_png_size));
 	SDL_Texture* sprite_sheet_texture = SDL_CreateTextureFromSurface(renderer,
@@ -156,35 +258,10 @@ int main(void)
 	SDL_Rect sprite_sheet_rect = {.w = 16, .h = 16};
 	SDL_Rect sprite_rect = {.w = CELL_SIDE_PIXELS, .h = CELL_SIDE_PIXELS};
 	
-	#define GRID_SIDE (800 / CELL_SIDE_PIXELS)
-	cell_t grid[GRID_SIDE * GRID_SIDE] = {0};
-
-	for (int y = 0; y < GRID_SIDE; y++)
-	for (int x = 0; x < GRID_SIDE; x++)
-	{
-		if ((x ^ (y + 1)) % 7 == 1)
-		{
-			grid[y * GRID_SIDE + x].floor = FLOOR_DESERT;
-		}
-
-		if (((x - 2) ^ (y + 2)) % 31 == 1)
-		{
-			grid[y * GRID_SIDE + x].object = OBJECT_UNIT_ENEMY;
-		}
-		if ((x ^ (y + 3)) % 13 == 3)
-		{
-			grid[y * GRID_SIDE + x].object = OBJECT_ROCK;
-		}
-
-	}
-
-	grid[(GRID_SIDE / 2) * GRID_SIDE + (GRID_SIDE / 2)].object = OBJECT_UNIT_CONTROLLED;
-	grid[(GRID_SIDE / 2) * GRID_SIDE + (GRID_SIDE / 2 - 1)].object = OBJECT_UNIT_CONTROLLED;
-	grid[(GRID_SIDE / 2) * GRID_SIDE + (GRID_SIDE / 2 - 2)].object = OBJECT_UNIT_CONTROLLED;
-
-	int mouse_pixel_x = -1, mouse_pixel_y = -1;
-	int hovered_cell_x = -1, hovered_cell_y = -1;
-	int selected_cell_x = -1, selected_cell_y = -1;
+	map_t* map = malloc(sizeof(map_t));
+	map->grid_side = 800 / CELL_SIDE_PIXELS;
+	map->grid = calloc(map->grid_side * map->grid_side, sizeof(cell_t));
+	map_generate(map);
 
 	bool running = true;
 	while (running)
@@ -206,53 +283,42 @@ int main(void)
 					}
 				break;
 				case SDL_MOUSEMOTION:
-					mouse_pixel_x = event.motion.x;
-					mouse_pixel_y = event.motion.y;
-					hovered_cell_x = mouse_pixel_x / CELL_SIDE_PIXELS;
-					hovered_cell_y = mouse_pixel_y / CELL_SIDE_PIXELS;
+				{
+					map_clear_hovered(map);
+					cell_t* cell = map_cell_from_pixel(map, event.motion.x, event.motion.y);
+					cell->is_hovered = true;
+				}
 				break;
 				case SDL_MOUSEBUTTONDOWN:
 					if (event.button.button == SDL_BUTTON_LEFT)
 					{
-						int const old_selected_cell_x = selected_cell_x;
-						int const old_selected_cell_y = selected_cell_y;
-						selected_cell_x = hovered_cell_x;
-						selected_cell_y = hovered_cell_y;
-						cell_t* selected_cell =
-							&grid[selected_cell_y * GRID_SIDE + selected_cell_x];
-						if (selected_cell->is_green)
+						cell_t* old_selected = map_selected_cell(map);
+						map_clear_selected(map);
+						cell_t* new_selected = map_hovered_cell(map);
+						new_selected->is_selected = true;
+						if (new_selected->is_green)
 						{
-							cell_t* old_selected_cell =
-								&grid[old_selected_cell_y * GRID_SIDE + old_selected_cell_x];
-							assert(old_selected_cell->object == OBJECT_UNIT_CONTROLLED);
-							old_selected_cell->object = OBJECT_NONE;
-							selected_cell->object = OBJECT_UNIT_CONTROLLED;
-							for (int y = 0; y < GRID_SIDE; y++)
-							for (int x = 0; x < GRID_SIDE; x++)
-							{
-								grid[y * GRID_SIDE + x].is_green = false;
-							}
+							assert(old_selected->object == OBJECT_UNIT_CONTROLLED);
+							old_selected->object = OBJECT_NONE;
+							new_selected->object = OBJECT_UNIT_CONTROLLED;
+							map_clear_green(map);
 							break;
 						}
-						for (int y = 0; y < GRID_SIDE; y++)
-						for (int x = 0; x < GRID_SIDE; x++)
+						map_clear_green(map);
+						if (new_selected->object == OBJECT_UNIT_CONTROLLED)
 						{
-							grid[y * GRID_SIDE + x].is_green = false;
-						}
-						if (selected_cell->object == OBJECT_UNIT_CONTROLLED)
-						{
-							for (int y = 0; y < GRID_SIDE; y++)
-							for (int x = 0; x < GRID_SIDE; x++)
+							int selected_x, selected_y;
+							map_cell_coords(map, new_selected, &selected_x, &selected_y);
+							for (int y = 0; y < map->grid_side; y++)
+							for (int x = 0; x < map->grid_side; x++)
 							{
-								int const dist_x = abs(x - selected_cell_x);
-								int const dist_y = abs(y - selected_cell_y);
-								int const dist = dist_x + dist_y;
+								int const dist = abs(x - selected_x) + abs(y - selected_y);
 								bool is_accessible = dist != 0 && dist <= 2;
-								if (grid[y * GRID_SIDE + x].object != OBJECT_NONE)
+								if (map_cell(map, x, y)->object != OBJECT_NONE)
 								{
 									is_accessible = false;
 								}
-								grid[y * GRID_SIDE + x].is_green = is_accessible;
+								map_cell(map, x, y)->is_green = is_accessible;
 							}
 						}
 					}
@@ -263,16 +329,13 @@ int main(void)
 		SDL_SetRenderDrawColor(renderer, 30, 40, 80, 255);
 		SDL_RenderClear(renderer);
 
-		for (int y = 0; y < GRID_SIDE; y++)
-		for (int x = 0; x < GRID_SIDE; x++)
+		for (int y = 0; y < map->grid_side; y++)
+		for (int x = 0; x < map->grid_side; x++)
 		{
-			cell_t const* cell = &grid[y * GRID_SIDE + x];
 			int const pixel_x = x * CELL_SIDE_PIXELS;
 			int const pixel_y = y * CELL_SIDE_PIXELS;
-			bool const is_hovered = x == hovered_cell_x && y == hovered_cell_y;
-			bool const is_selected = x == selected_cell_x && y == selected_cell_y;
-			draw_cell(renderer, cell, pixel_x, pixel_y, CELL_SIDE_PIXELS,
-				is_hovered, is_selected);
+			draw_cell(renderer, map_cell(map, x, y),
+				pixel_x, pixel_y, CELL_SIDE_PIXELS);
 		}
 
 		sprite_sheet_rect.x = 0;
