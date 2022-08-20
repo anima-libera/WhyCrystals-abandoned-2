@@ -18,6 +18,31 @@ enum floor_type_t
 };
 typedef enum floor_type_t floor_type_t;
 
+struct sprite_sheet_t
+{
+	SDL_Texture* texture;
+	SDL_Rect rect_rock;
+	SDL_Rect rect_unit_controlled;
+	SDL_Rect rect_unit_enemy;
+};
+typedef struct sprite_sheet_t sprite_sheet_t;
+
+sprite_sheet_t g_ss;
+
+void sprite_sheet_load(SDL_Renderer* renderer, sprite_sheet_t* ss)
+{
+	SDL_Surface* surface = IMG_LoadPNG_RW(SDL_RWFromConstMem(
+		g_asset_sprite_sheet_png, g_asset_sprite_sheet_png_size));
+	ss->texture = SDL_CreateTextureFromSurface(renderer, surface);
+	SDL_FreeSurface(surface);
+	SDL_Rect rect = {.x = 0, .y = 0, .w = 16, .h = 16};
+	ss->rect_rock = rect;
+	rect.y += 16;
+	ss->rect_unit_controlled = rect;
+	rect.y += 16;
+	ss->rect_unit_enemy = rect;
+}
+
 enum object_t
 {
 	OBJECT_NONE,
@@ -29,35 +54,24 @@ typedef enum object_t object_t;
 
 void draw_object(SDL_Renderer* renderer, object_t const* object, int x, int y, int side)
 {
-	SDL_Rect rect = {.x = x, .y = y, .w = side, .h = side};
+	SDL_Rect dst_rect = {.x = x, .y = y, .w = side, .h = side};
+	SDL_Rect* src_rect;
 	switch (*object)
 	{
 		case OBJECT_NONE:
 			return;
 		break;
 		case OBJECT_ROCK:
-			SDL_SetRenderDrawColor(renderer, 80, 80, 0, 255);
-			rect.x += 4;
-			rect.y -= 2;
-			rect.w -= 8;
-			rect.h -= 2;
+			src_rect = &g_ss.rect_rock;
 		break;
 		case OBJECT_UNIT_CONTROLLED:
-			SDL_SetRenderDrawColor(renderer, 0, 0, 160, 255);
-			rect.x += 10;
-			rect.y += 5;
-			rect.w -= 20;
-			rect.h -= 10;
+			src_rect = &g_ss.rect_unit_controlled;
 		break;
 		case OBJECT_UNIT_ENEMY:
-			SDL_SetRenderDrawColor(renderer, 160, 0, 0, 255);
-			rect.x += 10;
-			rect.y += 5;
-			rect.w -= 20;
-			rect.h -= 10;
+			src_rect = &g_ss.rect_unit_enemy;
 		break;
 	}
-	SDL_RenderFillRect(renderer, &rect);
+	SDL_RenderCopy(renderer, g_ss.texture, src_rect, &dst_rect);
 }
 
 struct cell_t
@@ -254,13 +268,7 @@ int main(void)
 		exit(-1);
 	}
 
-	SDL_Surface* sprite_sheet_surface = IMG_LoadPNG_RW(SDL_RWFromConstMem(
-		g_asset_sprite_sheet_png, g_asset_sprite_sheet_png_size));
-	SDL_Texture* sprite_sheet_texture = SDL_CreateTextureFromSurface(renderer,
-		sprite_sheet_surface);
-	SDL_FreeSurface(sprite_sheet_surface);
-	SDL_Rect sprite_sheet_rect = {.w = 16, .h = 16};
-	SDL_Rect sprite_rect = {.w = CELL_SIDE_PIXELS, .h = CELL_SIDE_PIXELS};
+	sprite_sheet_load(renderer, &g_ss);
 	
 	map_t* map = malloc(sizeof(map_t));
 	map->grid_side = WINDOW_SIDE / CELL_SIDE_PIXELS;
@@ -341,12 +349,6 @@ int main(void)
 			draw_cell(renderer, map_cell(map, x, y),
 				pixel_x, pixel_y, CELL_SIDE_PIXELS);
 		}
-
-		sprite_sheet_rect.x = 0;
-		sprite_sheet_rect.y = 0;
-		sprite_rect.x = CELL_SIDE_PIXELS * ((WINDOW_SIDE / CELL_SIDE_PIXELS) / 2);
-		sprite_rect.y = CELL_SIDE_PIXELS * ((WINDOW_SIDE / CELL_SIDE_PIXELS) / 2 - 1);
-		SDL_RenderCopy(renderer, sprite_sheet_texture, &sprite_sheet_rect, &sprite_rect);
 
 		SDL_RenderPresent(renderer);
 	}
