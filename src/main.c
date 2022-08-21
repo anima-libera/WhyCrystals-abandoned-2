@@ -188,12 +188,12 @@ void map_generate(map_t* map)
 
 	}
 
+	map_cell(map, 5, 6)->object.type = OBJECT_UNIT_CONTROLLED;
+	map_cell(map, 5, 6)->object.can_still_move = true;
 	map_cell(map, 6, 6)->object.type = OBJECT_UNIT_CONTROLLED;
 	map_cell(map, 6, 6)->object.can_still_move = true;
 	map_cell(map, 7, 6)->object.type = OBJECT_UNIT_CONTROLLED;
 	map_cell(map, 7, 6)->object.can_still_move = true;
-	map_cell(map, 8, 6)->object.type = OBJECT_UNIT_CONTROLLED;
-	map_cell(map, 8, 6)->object.can_still_move = true;
 }
 
 void map_clear_green(map_t* map)
@@ -321,6 +321,117 @@ void handle_mouse_click(map_t* map)
 	}
 }
 
+struct game_state_t
+{
+	bool player_phase;
+	int t;
+};
+typedef struct game_state_t game_state_t;
+
+bool game_play_enemy(map_t* map)
+{
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		cell_t* src_cell = map_cell(map, x, y);
+		if (src_cell->object.can_still_move)
+		{
+			assert(src_cell->object.type == OBJECT_UNIT_ENEMY);
+			int dst_x = x, dst_y = y;
+
+			if ((rand() >> 5) % 2)
+			{
+				dst_x += rand() % 2 ? 1 : -1;
+			}
+			else
+			{
+				dst_y += rand() % 2 ? 1 : -1;
+			}
+
+			if (dst_x < 0)
+			{
+				dst_x = 0;
+			}
+			else if (dst_x >= map->grid_side)
+			{
+				dst_x = map->grid_side - 1;
+			}
+			if (dst_y < 0)
+			{
+				dst_y = 0;
+			}
+			else if (dst_y >= map->grid_side)
+			{
+				dst_y = map->grid_side - 1;
+			}
+
+			cell_t* dst_cell = map_cell(map, dst_x, dst_y);
+			if (dst_cell == src_cell || dst_cell->object.type != OBJECT_NONE)
+			{
+				src_cell->object.can_still_move = false;
+				return false;
+			}
+			dst_cell->object = src_cell->object;
+			dst_cell->object.can_still_move = false;
+			src_cell->object = (object_t){0};
+			return false;
+		}
+	}
+	return true;
+}
+
+void start_enemy_phase(game_state_t* gs, map_t* map)
+{
+	gs->player_phase = false;
+	gs->t = 0;
+	map_clear_green(map);
+	map_clear_selected(map);
+	map_clear_can_still_move(map);
+
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		cell_t* cell = map_cell(map, x, y);
+		if (cell->object.type == OBJECT_UNIT_ENEMY)
+		{
+			cell->object.can_still_move = true;
+		}
+	}
+}
+
+void start_player_phase(game_state_t* gs, map_t* map)
+{
+	gs->player_phase = true;
+	gs->t = 0;
+	map_clear_can_still_move(map);
+
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		cell_t* cell = map_cell(map, x, y);
+		if (cell->object.type == OBJECT_UNIT_CONTROLLED)
+		{
+			cell->object.can_still_move = true;
+		}
+	}
+}
+
+void game_perform(game_state_t* gs, map_t* map)
+{
+	if (!gs->player_phase)
+	{
+		gs->t++;
+		if (gs->t % 10 == 0)
+		{
+			bool const enemy_is_done = game_play_enemy(map);
+			if (enemy_is_done)
+			{
+				start_player_phase(gs, map);
+			}
+		}
+	}
+}
+
 int main(void)
 {
 	printf("hellow, %s", g_asset_test);
@@ -360,7 +471,10 @@ int main(void)
 	map->grid = calloc(map->grid_side * map->grid_side, sizeof(cell_t));
 	map_generate(map);
 
-	bool player_phase = true;
+	game_state_t* gs = malloc(sizeof(game_state_t));
+	gs->player_phase = true;
+	gs->t = 0;
+
 	bool running = true;
 	while (running)
 	{
@@ -380,10 +494,10 @@ int main(void)
 						break;
 						case SDLK_RETURN:
 						case SDLK_SPACE:
-							player_phase = false;
-							map_clear_green(map);
-							map_clear_selected(map);
-							map_clear_can_still_move(map);
+							if (gs->player_phase)
+							{
+								start_enemy_phase(gs, map);
+							}
 						break;
 					}
 				break;
@@ -391,13 +505,15 @@ int main(void)
 					handle_mouse_motion(map, event.motion.x, event.motion.y);
 				break;
 				case SDL_MOUSEBUTTONDOWN:
-					if (event.button.button == SDL_BUTTON_LEFT && player_phase)
+					if (event.button.button == SDL_BUTTON_LEFT && gs->player_phase)
 					{
 						handle_mouse_click(map);
 					}
 				break;
 			}
 		}
+
+		game_perform(gs, map);
 
 		SDL_SetRenderDrawColor(g_renderer, 30, 40, 80, 255);
 		SDL_RenderClear(g_renderer);
