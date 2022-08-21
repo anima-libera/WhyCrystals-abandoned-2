@@ -7,6 +7,8 @@
 #include <SDL2/SDL_image.h>
 #include "embedded.h"
 
+SDL_Renderer* g_renderer;
+
 #define CELL_SIDE_PIXELS 64
 #define WINDOW_SIDE (800 - 800 % CELL_SIDE_PIXELS)
 
@@ -29,11 +31,11 @@ typedef struct sprite_sheet_t sprite_sheet_t;
 
 sprite_sheet_t g_ss;
 
-void sprite_sheet_load(SDL_Renderer* renderer, sprite_sheet_t* ss)
+void sprite_sheet_load(sprite_sheet_t* ss)
 {
 	SDL_Surface* surface = IMG_LoadPNG_RW(SDL_RWFromConstMem(
 		g_asset_sprite_sheet_png, g_asset_sprite_sheet_png_size));
-	ss->texture = SDL_CreateTextureFromSurface(renderer, surface);
+	ss->texture = SDL_CreateTextureFromSurface(g_renderer, surface);
 	SDL_FreeSurface(surface);
 	SDL_Rect rect = {.x = 0, .y = 0, .w = 16, .h = 16};
 	ss->rect_rock = rect;
@@ -59,7 +61,7 @@ struct object_t
 };
 typedef struct object_t object_t;
 
-void draw_object(SDL_Renderer* renderer, object_t const* object, int x, int y, int side)
+void draw_object(object_t const* object, int x, int y, int side)
 {
 	SDL_Rect dst_rect = {.x = x, .y = y, .w = side, .h = side};
 	SDL_Rect* src_rect;
@@ -78,7 +80,7 @@ void draw_object(SDL_Renderer* renderer, object_t const* object, int x, int y, i
 			src_rect = &g_ss.rect_unit_enemy;
 		break;
 	}
-	SDL_RenderCopy(renderer, g_ss.texture, src_rect, &dst_rect);
+	SDL_RenderCopy(g_renderer, g_ss.texture, src_rect, &dst_rect);
 
 	if (object->can_still_move)
 	{
@@ -86,8 +88,8 @@ void draw_object(SDL_Renderer* renderer, object_t const* object, int x, int y, i
 		dst_rect.y += 4;
 		dst_rect.w = 8;
 		dst_rect.h = 8;
-		SDL_SetRenderDrawColor(renderer, 0, 100, 0, 255);
-		SDL_RenderDrawRect(renderer, &dst_rect);
+		SDL_SetRenderDrawColor(g_renderer, 0, 100, 0, 255);
+		SDL_RenderDrawRect(g_renderer, &dst_rect);
 	}
 }
 
@@ -101,31 +103,31 @@ struct cell_t
 };
 typedef struct cell_t cell_t;
 
-void draw_cell(SDL_Renderer* renderer, cell_t const* cell, int x, int y, int side)
+void draw_cell(cell_t const* cell, int x, int y, int side)
 {
 	SDL_Rect rect = {.x = x, .y = y, .w = side, .h = side};
 	switch (cell->floor)
 	{
 		case FLOOR_FIELD:
-			SDL_SetRenderDrawColor(renderer, 40, 210, 10, 255);
+			SDL_SetRenderDrawColor(g_renderer, 40, 210, 10, 255);
 		break;
 		case FLOOR_DESERT:
-			SDL_SetRenderDrawColor(renderer, 250, 210, 10, 255);
+			SDL_SetRenderDrawColor(g_renderer, 250, 210, 10, 255);
 		break;
 		case FLOOR_WATER:
-			SDL_SetRenderDrawColor(renderer, 40, 210, 250, 255);
+			SDL_SetRenderDrawColor(g_renderer, 40, 210, 250, 255);
 		break;
 	}
-	SDL_RenderFillRect(renderer, &rect);
+	SDL_RenderFillRect(g_renderer, &rect);
 	if (cell->is_selected)
 	{
-		SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-		SDL_RenderDrawRect(renderer, &rect);
+		SDL_SetRenderDrawColor(g_renderer, 255, 255, 255, 255);
+		SDL_RenderDrawRect(g_renderer, &rect);
 	}
 	else if (cell->is_hovered && !cell->is_green)
 	{
-		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-		SDL_RenderDrawRect(renderer, &rect);
+		SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
+		SDL_RenderDrawRect(g_renderer, &rect);
 	}
 	if (cell->is_green)
 	{
@@ -134,11 +136,11 @@ void draw_cell(SDL_Renderer* renderer, cell_t const* cell, int x, int y, int sid
 		rect.y += margin;
 		rect.w -= margin * 2;
 		rect.h -= margin * 2;
-		SDL_SetRenderDrawColor(renderer, 0, 100, 0, 255);
-		SDL_RenderDrawRect(renderer, &rect);
+		SDL_SetRenderDrawColor(g_renderer, 0, 100, 0, 255);
+		SDL_RenderDrawRect(g_renderer, &rect);
 	}
 
-	draw_object(renderer, &cell->object, x, y, side);
+	draw_object(&cell->object, x, y, side);
 }
 
 struct map_t
@@ -151,6 +153,16 @@ typedef struct map_t map_t;
 cell_t* map_cell(map_t* map, int x, int y)
 {
 	return &map->grid[y * map->grid_side + x];
+}
+
+void draw_map(map_t* map)
+{
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		draw_cell(map_cell(map, x, y),
+			x * CELL_SIDE_PIXELS, y * CELL_SIDE_PIXELS, CELL_SIDE_PIXELS);
+	}
 }
 
 void map_generate(map_t* map)
@@ -211,6 +223,15 @@ void map_clear_selected(map_t* map)
 	}
 }
 
+void map_clear_can_still_move(map_t* map)
+{
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		map_cell(map, x, y)->object.can_still_move = false;
+	}
+}
+
 cell_t* map_cell_from_pixel(map_t* map, int pixel_x, int pixel_y)
 {
 	return map_cell(map,
@@ -258,6 +279,48 @@ void map_cell_coords(map_t* map, cell_t* cell, int* out_x, int* out_y)
 	}
 }
 
+void handle_mouse_motion(map_t* map, int new_x, int new_y)
+{
+	map_clear_hovered(map);
+	cell_t* cell = map_cell_from_pixel(map, new_x, new_y);
+	cell->is_hovered = true;
+}
+
+void handle_mouse_click(map_t* map)
+{
+	cell_t* old_selected = map_selected_cell(map);
+	map_clear_selected(map);
+	cell_t* new_selected = map_hovered_cell(map);
+	new_selected->is_selected = true;
+	if (new_selected->is_green)
+	{
+		assert(old_selected->object.type == OBJECT_UNIT_CONTROLLED);
+		new_selected->object = old_selected->object;
+		new_selected->object.can_still_move = false;
+		old_selected->object = (object_t){0};
+		map_clear_green(map);
+		return;
+	}
+	map_clear_green(map);
+	if (new_selected->object.type == OBJECT_UNIT_CONTROLLED &&
+		new_selected->object.can_still_move)
+	{
+		int selected_x, selected_y;
+		map_cell_coords(map, new_selected, &selected_x, &selected_y);
+		for (int y = 0; y < map->grid_side; y++)
+		for (int x = 0; x < map->grid_side; x++)
+		{
+			int const dist = abs(x - selected_x) + abs(y - selected_y);
+			bool is_accessible = dist != 0 && dist <= 2;
+			if (map_cell(map, x, y)->object.type != OBJECT_NONE)
+			{
+				is_accessible = false;
+			}
+			map_cell(map, x, y)->is_green = is_accessible;
+		}
+	}
+}
+
 int main(void)
 {
 	printf("hellow, %s", g_asset_test);
@@ -276,9 +339,9 @@ int main(void)
 		exit(-1);
 	}
 
-	SDL_Renderer* renderer = SDL_CreateRenderer(window, -1,
+	g_renderer = SDL_CreateRenderer(window, -1,
 		SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE);
-	if (renderer == NULL)
+	if (g_renderer == NULL)
 	{
 		printf("TODO: Handle error.\n");
 		exit(-1);
@@ -290,13 +353,14 @@ int main(void)
 		exit(-1);
 	}
 
-	sprite_sheet_load(renderer, &g_ss);
+	sprite_sheet_load(&g_ss);
 	
 	map_t* map = malloc(sizeof(map_t));
 	map->grid_side = WINDOW_SIDE / CELL_SIDE_PIXELS;
 	map->grid = calloc(map->grid_side * map->grid_side, sizeof(cell_t));
 	map_generate(map);
 
+	bool player_phase = true;
 	bool running = true;
 	while (running)
 	{
@@ -314,71 +378,35 @@ int main(void)
 						case SDLK_ESCAPE:
 							running = false;
 						break;
+						case SDLK_RETURN:
+						case SDLK_SPACE:
+							player_phase = false;
+							map_clear_green(map);
+							map_clear_selected(map);
+							map_clear_can_still_move(map);
+						break;
 					}
 				break;
 				case SDL_MOUSEMOTION:
-				{
-					map_clear_hovered(map);
-					cell_t* cell = map_cell_from_pixel(map, event.motion.x, event.motion.y);
-					cell->is_hovered = true;
-				}
+					handle_mouse_motion(map, event.motion.x, event.motion.y);
 				break;
 				case SDL_MOUSEBUTTONDOWN:
-					if (event.button.button == SDL_BUTTON_LEFT)
+					if (event.button.button == SDL_BUTTON_LEFT && player_phase)
 					{
-						cell_t* old_selected = map_selected_cell(map);
-						map_clear_selected(map);
-						cell_t* new_selected = map_hovered_cell(map);
-						new_selected->is_selected = true;
-						if (new_selected->is_green)
-						{
-							assert(old_selected->object.type == OBJECT_UNIT_CONTROLLED);
-							new_selected->object = old_selected->object;
-							new_selected->object.can_still_move = false;
-							old_selected->object = (object_t){0};
-							map_clear_green(map);
-							break;
-						}
-						map_clear_green(map);
-						if (new_selected->object.type == OBJECT_UNIT_CONTROLLED &&
-							new_selected->object.can_still_move)
-						{
-							int selected_x, selected_y;
-							map_cell_coords(map, new_selected, &selected_x, &selected_y);
-							for (int y = 0; y < map->grid_side; y++)
-							for (int x = 0; x < map->grid_side; x++)
-							{
-								int const dist = abs(x - selected_x) + abs(y - selected_y);
-								bool is_accessible = dist != 0 && dist <= 2;
-								if (map_cell(map, x, y)->object.type != OBJECT_NONE)
-								{
-									is_accessible = false;
-								}
-								map_cell(map, x, y)->is_green = is_accessible;
-							}
-						}
+						handle_mouse_click(map);
 					}
 				break;
 			}
 		}
 
-		SDL_SetRenderDrawColor(renderer, 30, 40, 80, 255);
-		SDL_RenderClear(renderer);
-
-		for (int y = 0; y < map->grid_side; y++)
-		for (int x = 0; x < map->grid_side; x++)
-		{
-			int const pixel_x = x * CELL_SIDE_PIXELS;
-			int const pixel_y = y * CELL_SIDE_PIXELS;
-			draw_cell(renderer, map_cell(map, x, y),
-				pixel_x, pixel_y, CELL_SIDE_PIXELS);
-		}
-
-		SDL_RenderPresent(renderer);
+		SDL_SetRenderDrawColor(g_renderer, 30, 40, 80, 255);
+		SDL_RenderClear(g_renderer);
+		draw_map(map);
+		SDL_RenderPresent(g_renderer);
 	}
 
 	IMG_Quit(); 
-	SDL_DestroyRenderer(renderer);
+	SDL_DestroyRenderer(g_renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit(); 
 
