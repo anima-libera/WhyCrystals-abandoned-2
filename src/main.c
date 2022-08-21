@@ -43,20 +43,27 @@ void sprite_sheet_load(SDL_Renderer* renderer, sprite_sheet_t* ss)
 	ss->rect_unit_enemy = rect;
 }
 
-enum object_t
+enum object_type_t
 {
 	OBJECT_NONE,
 	OBJECT_ROCK,
 	OBJECT_UNIT_CONTROLLED,
 	OBJECT_UNIT_ENEMY,
 };
-typedef enum object_t object_t;
+typedef enum object_type_t object_type_t;
+
+struct object_t
+{
+	object_type_t type;
+	bool can_still_move;
+};
+typedef struct object_t object_t;
 
 void draw_object(SDL_Renderer* renderer, object_t const* object, int x, int y, int side)
 {
 	SDL_Rect dst_rect = {.x = x, .y = y, .w = side, .h = side};
 	SDL_Rect* src_rect;
-	switch (*object)
+	switch (object->type)
 	{
 		case OBJECT_NONE:
 			return;
@@ -72,6 +79,16 @@ void draw_object(SDL_Renderer* renderer, object_t const* object, int x, int y, i
 		break;
 	}
 	SDL_RenderCopy(renderer, g_ss.texture, src_rect, &dst_rect);
+
+	if (object->can_still_move)
+	{
+		dst_rect.x += 4;
+		dst_rect.y += 4;
+		dst_rect.w = 8;
+		dst_rect.h = 8;
+		SDL_SetRenderDrawColor(renderer, 0, 100, 0, 255);
+		SDL_RenderDrawRect(renderer, &dst_rect);
+	}
 }
 
 struct cell_t
@@ -141,6 +158,8 @@ void map_generate(map_t* map)
 	for (int y = 0; y < map->grid_side; y++)
 	for (int x = 0; x < map->grid_side; x++)
 	{
+		map_cell(map, x, y)->object = (object_t){0};
+
 		if ((x ^ (y + 1)) % 7 == 1)
 		{
 			map_cell(map, x, y)->floor = FLOOR_DESERT;
@@ -148,18 +167,21 @@ void map_generate(map_t* map)
 
 		if (((x - 2) ^ (y + 2)) % 31 == 1)
 		{
-			map_cell(map, x, y)->object = OBJECT_UNIT_ENEMY;
+			map_cell(map, x, y)->object.type = OBJECT_UNIT_ENEMY;
 		}
 		if ((x ^ (y + 3)) % 13 == 3)
 		{
-			map_cell(map, x, y)->object = OBJECT_ROCK;
+			map_cell(map, x, y)->object.type = OBJECT_ROCK;
 		}
 
 	}
 
-	map_cell(map, 6, 6)->object = OBJECT_UNIT_CONTROLLED;
-	map_cell(map, 7, 6)->object = OBJECT_UNIT_CONTROLLED;
-	map_cell(map, 8, 6)->object = OBJECT_UNIT_CONTROLLED;
+	map_cell(map, 6, 6)->object.type = OBJECT_UNIT_CONTROLLED;
+	map_cell(map, 6, 6)->object.can_still_move = true;
+	map_cell(map, 7, 6)->object.type = OBJECT_UNIT_CONTROLLED;
+	map_cell(map, 7, 6)->object.can_still_move = true;
+	map_cell(map, 8, 6)->object.type = OBJECT_UNIT_CONTROLLED;
+	map_cell(map, 8, 6)->object.can_still_move = true;
 }
 
 void map_clear_green(map_t* map)
@@ -310,14 +332,16 @@ int main(void)
 						new_selected->is_selected = true;
 						if (new_selected->is_green)
 						{
-							assert(old_selected->object == OBJECT_UNIT_CONTROLLED);
-							old_selected->object = OBJECT_NONE;
-							new_selected->object = OBJECT_UNIT_CONTROLLED;
+							assert(old_selected->object.type == OBJECT_UNIT_CONTROLLED);
+							new_selected->object = old_selected->object;
+							new_selected->object.can_still_move = false;
+							old_selected->object = (object_t){0};
 							map_clear_green(map);
 							break;
 						}
 						map_clear_green(map);
-						if (new_selected->object == OBJECT_UNIT_CONTROLLED)
+						if (new_selected->object.type == OBJECT_UNIT_CONTROLLED &&
+							new_selected->object.can_still_move)
 						{
 							int selected_x, selected_y;
 							map_cell_coords(map, new_selected, &selected_x, &selected_y);
@@ -326,7 +350,7 @@ int main(void)
 							{
 								int const dist = abs(x - selected_x) + abs(y - selected_y);
 								bool is_accessible = dist != 0 && dist <= 2;
-								if (map_cell(map, x, y)->object != OBJECT_NONE)
+								if (map_cell(map, x, y)->object.type != OBJECT_NONE)
 								{
 									is_accessible = false;
 								}
