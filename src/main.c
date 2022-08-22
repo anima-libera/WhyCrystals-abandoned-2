@@ -471,6 +471,8 @@ bool game_play_enemy(map_t* map)
 
 			cell_t* dst_cell = map_cell(map, dst_x, dst_y);
 			if (dst_cell->object.type != OBJECT_CRYSTAL &&
+				dst_cell->object.type != OBJECT_UNIT_CONTROLLED &&
+				dst_cell->object.type != OBJECT_TOWER &&
 				(dst_cell == src_cell || dst_cell->object.type != OBJECT_NONE))
 			{
 				src_cell->object.can_still_move = false;
@@ -642,7 +644,6 @@ void start_player_phase(game_state_t* gs, map_t* map)
 {
 	if (gs->game_is_lost)
 	{
-		printf("The crystal is destroyed: game over.\n");
 		start_enemy_phase(gs, map);
 		return;
 	}
@@ -674,6 +675,7 @@ void game_perform(game_state_t* gs, map_t* map)
 			if (dst_cell->object.type == OBJECT_CRYSTAL)
 			{
 				gs->game_is_lost = true;
+				printf("The crystal is destroyed: game over.\n");
 			}
 			if (map->motion.object.type == OBJECT_SHOT)
 			{
