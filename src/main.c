@@ -24,10 +24,14 @@ struct sprite_sheet_t
 {
 	SDL_Texture* texture;
 	SDL_Rect rect_rock;
-	SDL_Rect rect_unit_controlled;
+	SDL_Rect rect_unit_controlled_red;
+	SDL_Rect rect_unit_controlled_blue;
+	SDL_Rect rect_unit_controlled_pink;
 	SDL_Rect rect_unit_enemy;
+	SDL_Rect rect_unit_enemy_big;
 	SDL_Rect rect_egg;
 	SDL_Rect rect_tower;
+	SDL_Rect rect_tower_off;
 	SDL_Rect rect_shot;
 	SDL_Rect rect_tree;
 	SDL_Rect rect_crystal;
@@ -45,16 +49,28 @@ void sprite_sheet_load(sprite_sheet_t* ss)
 	ss->texture = SDL_CreateTextureFromSurface(g_renderer, surface);
 	SDL_FreeSurface(surface);
 	SDL_Rect rect = {.x = 0, .y = 0, .w = 16, .h = 16};
-	rect.y +=  0; ss->rect_rock = rect;
-	rect.y += 16; ss->rect_unit_controlled = rect;
-	rect.y += 16; ss->rect_unit_enemy = rect;
-	rect.y += 16; ss->rect_egg = rect;
-	rect.y += 16; ss->rect_tower = rect;
-	rect.y += 16; ss->rect_shot = rect;
-	rect.y += 16; ss->rect_tree = rect;
-	rect.y += 16; ss->rect_crystal = rect;
-	rect.y += 16; ss->rect_grassland = rect;
-	rect.y += 16; ss->rect_desert = rect;
+	ss->rect_rock = rect; rect.x += 16;
+	rect.x = 0; rect.y += 16;
+	ss->rect_unit_controlled_red = rect; rect.x += 16;
+	ss->rect_unit_controlled_blue = rect; rect.x += 16;
+	ss->rect_unit_controlled_pink = rect; rect.x += 16;
+	rect.x = 0; rect.y += 16;
+	ss->rect_unit_enemy = rect; rect.x += 16;
+	ss->rect_unit_enemy_big = rect; rect.x += 16;
+	rect.x = 0; rect.y += 16;
+	ss->rect_egg = rect; rect.x += 16;
+	rect.x = 0; rect.y += 16;
+	ss->rect_tower = rect; rect.x += 16;
+	ss->rect_tower_off = rect; rect.x += 16;
+	rect.x = 0; rect.y += 16;
+	ss->rect_shot = rect; rect.x += 16;
+	rect.x = 0; rect.y += 16;
+	ss->rect_tree = rect; rect.x += 16;
+	rect.x = 0; rect.y += 16;
+	ss->rect_crystal = rect; rect.x += 16;
+	rect.x = 0; rect.y += 16;
+	ss->rect_grassland = rect; rect.x += 16;
+	ss->rect_desert = rect; rect.x += 16;
 }
 
 enum object_type_t
@@ -64,6 +80,7 @@ enum object_type_t
 	OBJECT_UNIT_CONTROLLED,
 	OBJECT_UNIT_ENEMY,
 	OBJECT_TOWER,
+	OBJECT_TOWER_OFF,
 	OBJECT_SHOT,
 	OBJECT_CRYSTAL,
 	OBJECT_EGG,
@@ -92,13 +109,16 @@ void draw_object(object_t const* object, int x, int y, int side)
 			src_rect = &g_ss.rect_rock;
 		break;
 		case OBJECT_UNIT_CONTROLLED:
-			src_rect = &g_ss.rect_unit_controlled;
+			src_rect = &g_ss.rect_unit_controlled_red;
 		break;
 		case OBJECT_UNIT_ENEMY:
 			src_rect = &g_ss.rect_unit_enemy;
 		break;
 		case OBJECT_TOWER:
 			src_rect = &g_ss.rect_tower;
+		break;
+		case OBJECT_TOWER_OFF:
+			src_rect = &g_ss.rect_tower_off;
 		break;
 		case OBJECT_SHOT:
 			src_rect = &g_ss.rect_shot;
@@ -502,6 +522,7 @@ bool game_play_enemy(map_t* map, game_state_t* gs)
 			if (dst_cell->object.type != OBJECT_CRYSTAL &&
 				dst_cell->object.type != OBJECT_UNIT_CONTROLLED &&
 				dst_cell->object.type != OBJECT_TOWER &&
+				dst_cell->object.type != OBJECT_TOWER_OFF &&
 				dst_cell->object.type != OBJECT_TREE &&
 				(dst_cell == src_cell || dst_cell->object.type != OBJECT_NONE))
 			{
@@ -584,7 +605,7 @@ void tower_shoot(map_t* map, int tower_x, int tower_y, int target_x, int target_
 	cell->object.counter--;
 	if (cell->object.counter <= 0)
 	{
-		cell->object.type = OBJECT_TREE;
+		cell->object.type = OBJECT_TOWER_OFF;
 	}
 }
 
