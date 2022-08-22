@@ -64,6 +64,7 @@ enum object_type_t
 	OBJECT_UNIT_CONTROLLED,
 	OBJECT_UNIT_ENEMY,
 	OBJECT_TOWER,
+	OBJECT_SHOT,
 };
 typedef enum object_type_t object_type_t;
 
@@ -94,6 +95,9 @@ void draw_object(object_t const* object, int x, int y, int side)
 		break;
 		case OBJECT_TOWER:
 			src_rect = &g_ss.rect_tower;
+		break;
+		case OBJECT_SHOT:
+			src_rect = &g_ss.rect_shot;
 		break;
 	}
 	SDL_RenderCopy(g_renderer, g_ss.texture, src_rect, &dst_rect);
@@ -348,6 +352,7 @@ struct game_state_t
 {
 	bool tower_available;
 	bool player_phase;
+	bool tower_phase;
 	int t;
 };
 typedef struct game_state_t game_state_t;
@@ -473,9 +478,92 @@ bool game_play_enemy(map_t* map)
 	return true;
 }
 
+void tower_shoot(map_t* map, int tower_x, int tower_y, int target_x, int target_y)
+{
+	map->motion.t = 0;
+	map->motion.t_max = 12;
+	map->motion.src_x = tower_x;
+	map->motion.src_y = tower_y;
+	map->motion.dst_x = target_x;
+	map->motion.dst_y = target_y;
+	map->motion.object = (object_t){.type = OBJECT_SHOT};
+	map_cell(map, tower_x, tower_y)->object.can_still_move = false;
+}
+
+bool game_play_towers(map_t* map)
+{
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		cell_t* tower_cell = map_cell(map, x, y);
+		if (tower_cell->object.can_still_move)
+		{
+			assert(tower_cell->object.type == OBJECT_TOWER);
+
+			struct dir_t
+			{
+				int dx, dy;
+				int x, y;
+				bool is_valid;
+			};
+			typedef struct dir_t dir_t;
+
+			dir_t dirs[4] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+			for (int i = 0; i < 4; i ++)
+			{
+				dirs[i].x = x + dirs[i].dx;
+				dirs[i].y = y + dirs[i].dy;
+				dirs[i].is_valid =
+					dirs[i].x >= 0 && dirs[i].x < map->grid_side &&
+					dirs[i].y >= 0 && dirs[i].y < map->grid_side &&
+					map_cell(map, dirs[i].x, dirs[i].y)->object.type == OBJECT_NONE;
+			}
+
+			bool done = false;
+			while (!done)
+			{
+				done = true;
+				for (int i = 0; i < 4; i ++)
+				{
+					if (!dirs[i].is_valid)
+					{
+						continue;
+					}
+					done = false;
+
+					dirs[i].x += dirs[i].dx;
+					dirs[i].y += dirs[i].dy;
+					if (!(dirs[i].x >= 0 && dirs[i].x < map->grid_side &&
+						dirs[i].y >= 0 && dirs[i].y < map->grid_side))
+					{
+						dirs[i].is_valid = false;
+						continue;
+					}
+					object_type_t type = map_cell(map, dirs[i].x, dirs[i].y)->object.type;
+					if (type == OBJECT_UNIT_ENEMY)
+					{
+						tower_shoot(map, x, y, dirs[i].x, dirs[i].y);
+						return false;
+					}
+					if (type != OBJECT_NONE)
+					{
+						dirs[i].is_valid = false;
+					}
+				}
+			}
+
+			tower_cell->object.can_still_move = false;
+			return false;
+		}
+	}
+
+	return true;
+}
+
 void start_enemy_phase(game_state_t* gs, map_t* map)
 {
 	gs->player_phase = false;
+	gs->tower_phase = false;
 	gs->t = 0;
 	map_clear_green(map);
 	map_clear_selected(map);
@@ -492,9 +580,30 @@ void start_enemy_phase(game_state_t* gs, map_t* map)
 	}
 }
 
+void start_tower_phase(game_state_t* gs, map_t* map)
+{
+	gs->player_phase = false;
+	gs->tower_phase = true;
+	gs->t = 0;
+	map_clear_green(map);
+	map_clear_selected(map);
+	map_clear_can_still_move(map);
+
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		cell_t* cell = map_cell(map, x, y);
+		if (cell->object.type == OBJECT_TOWER)
+		{
+			cell->object.can_still_move = true;
+		}
+	}
+}
+
 void start_player_phase(game_state_t* gs, map_t* map)
 {
 	gs->player_phase = true;
+	gs->tower_phase = false;
 	gs->tower_available = true;
 	gs->t = 0;
 	map_clear_can_still_move(map);
@@ -517,18 +626,37 @@ void game_perform(game_state_t* gs, map_t* map)
 		if (map->motion.t >= map->motion.t_max)
 		{
 			cell_t* dst_cell = map_cell(map, map->motion.dst_x, map->motion.dst_y);
-			dst_cell->object = map->motion.object;
+			if (map->motion.object.type == OBJECT_SHOT)
+			{
+				dst_cell->object = (object_t){0};
+			}
+			else
+			{
+				dst_cell->object = map->motion.object;
+			}
 			map->motion = (motion_t){0};
 		}
 		map->motion.t++;
 	}
-	else if (!gs->player_phase)
+	else if (!gs->player_phase && !gs->tower_phase)
 	{
 		gs->t++;
 		if (gs->t % 3 == 0)
 		{
 			bool const enemy_is_done = game_play_enemy(map);
 			if (enemy_is_done)
+			{
+				start_tower_phase(gs, map);
+			}
+		}
+	}
+	else if (gs->tower_phase)
+	{
+		gs->t++;
+		if (gs->t % 3 == 0)
+		{
+			bool const towers_are_done = game_play_towers(map);
+			if (towers_are_done)
 			{
 				start_player_phase(gs, map);
 			}
@@ -579,6 +707,7 @@ int main(void)
 	game_state_t* gs = malloc(sizeof(game_state_t));
 	gs->tower_available = true;
 	gs->player_phase = true;
+	gs->tower_phase = false;
 	gs->t = 0;
 
 	bool running = true;
