@@ -26,6 +26,13 @@ struct sprite_sheet_t
 	SDL_Rect rect_rock;
 	SDL_Rect rect_unit_controlled;
 	SDL_Rect rect_unit_enemy;
+	SDL_Rect rect_egg;
+	SDL_Rect rect_tower;
+	SDL_Rect rect_shot;
+	SDL_Rect rect_tree;
+	SDL_Rect rect_crystal;
+	SDL_Rect rect_grassland;
+	SDL_Rect rect_desert;
 };
 typedef struct sprite_sheet_t sprite_sheet_t;
 
@@ -38,11 +45,16 @@ void sprite_sheet_load(sprite_sheet_t* ss)
 	ss->texture = SDL_CreateTextureFromSurface(g_renderer, surface);
 	SDL_FreeSurface(surface);
 	SDL_Rect rect = {.x = 0, .y = 0, .w = 16, .h = 16};
-	ss->rect_rock = rect;
-	rect.y += 16;
-	ss->rect_unit_controlled = rect;
-	rect.y += 16;
-	ss->rect_unit_enemy = rect;
+	rect.y +=  0; ss->rect_rock = rect;
+	rect.y += 16; ss->rect_unit_controlled = rect;
+	rect.y += 16; ss->rect_unit_enemy = rect;
+	rect.y += 16; ss->rect_egg = rect;
+	rect.y += 16; ss->rect_tower = rect;
+	rect.y += 16; ss->rect_shot = rect;
+	rect.y += 16; ss->rect_tree = rect;
+	rect.y += 16; ss->rect_crystal = rect;
+	rect.y += 16; ss->rect_grassland = rect;
+	rect.y += 16; ss->rect_desert = rect;
 }
 
 enum object_type_t
@@ -105,39 +117,58 @@ typedef struct cell_t cell_t;
 
 void draw_cell(cell_t const* cell, int x, int y, int side)
 {
-	SDL_Rect rect = {.x = x, .y = y, .w = side, .h = side};
+	SDL_Rect dst_rect = {.x = x, .y = y, .w = side, .h = side};
+	SDL_Rect* src_rect;
 	switch (cell->floor)
 	{
 		case FLOOR_FIELD:
-			SDL_SetRenderDrawColor(g_renderer, 40, 210, 10, 255);
+			src_rect = &g_ss.rect_grassland;
 		break;
 		case FLOOR_DESERT:
-			SDL_SetRenderDrawColor(g_renderer, 250, 210, 10, 255);
+			src_rect = &g_ss.rect_desert;
 		break;
 		case FLOOR_WATER:
-			SDL_SetRenderDrawColor(g_renderer, 40, 210, 250, 255);
+			printf("TODO: water tile\n");
+			exit(-1);
 		break;
 	}
-	SDL_RenderFillRect(g_renderer, &rect);
+	SDL_RenderCopy(g_renderer, g_ss.texture, src_rect, &dst_rect);
+	switch (cell->floor)
+	{
+		case FLOOR_FIELD:
+			SDL_SetRenderDrawColor(g_renderer, 0, 255, 0, 180);
+		break;
+		case FLOOR_DESERT:
+			SDL_SetRenderDrawColor(g_renderer, 255, 255, 0, 110);
+		break;
+		case FLOOR_WATER:
+			printf("TODO: water tile\n");
+			exit(-1);
+		break;
+	}
+	SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
+	SDL_RenderFillRect(g_renderer, &dst_rect);
+	SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_NONE);
+
 	if (cell->is_selected)
 	{
 		SDL_SetRenderDrawColor(g_renderer, 255, 255, 255, 255);
-		SDL_RenderDrawRect(g_renderer, &rect);
+		SDL_RenderDrawRect(g_renderer, &dst_rect);
 	}
 	else if (cell->is_hovered && !cell->is_green)
 	{
 		SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
-		SDL_RenderDrawRect(g_renderer, &rect);
+		SDL_RenderDrawRect(g_renderer, &dst_rect);
 	}
 	if (cell->is_green)
 	{
 		int const margin = cell->is_hovered ? 3 : 5;
-		rect.x += margin;
-		rect.y += margin;
-		rect.w -= margin * 2;
-		rect.h -= margin * 2;
+		dst_rect.x += margin;
+		dst_rect.y += margin;
+		dst_rect.w -= margin * 2;
+		dst_rect.h -= margin * 2;
 		SDL_SetRenderDrawColor(g_renderer, 0, 100, 0, 255);
-		SDL_RenderDrawRect(g_renderer, &rect);
+		SDL_RenderDrawRect(g_renderer, &dst_rect);
 	}
 
 	draw_object(&cell->object, x, y, side);
