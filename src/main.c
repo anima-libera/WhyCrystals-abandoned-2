@@ -63,6 +63,7 @@ enum object_type_t
 	OBJECT_ROCK,
 	OBJECT_UNIT_CONTROLLED,
 	OBJECT_UNIT_ENEMY,
+	OBJECT_TOWER,
 };
 typedef enum object_type_t object_type_t;
 
@@ -90,6 +91,9 @@ void draw_object(object_t const* object, int x, int y, int side)
 		break;
 		case OBJECT_UNIT_ENEMY:
 			src_rect = &g_ss.rect_unit_enemy;
+		break;
+		case OBJECT_TOWER:
+			src_rect = &g_ss.rect_tower;
 		break;
 	}
 	SDL_RenderCopy(g_renderer, g_ss.texture, src_rect, &dst_rect);
@@ -246,6 +250,8 @@ void map_generate(map_t* map)
 	map_cell(map, 6, 6)->object.can_still_move = true;
 	map_cell(map, 7, 6)->object.type = OBJECT_UNIT_CONTROLLED;
 	map_cell(map, 7, 6)->object.can_still_move = true;
+
+	map_cell(map, 3, 7)->object.type = OBJECT_TOWER;
 }
 
 void map_clear_green(map_t* map)
@@ -338,7 +344,15 @@ void handle_mouse_motion(map_t* map, int new_x, int new_y)
 	cell->is_hovered = true;
 }
 
-void handle_mouse_click(map_t* map)
+struct game_state_t
+{
+	bool tower_available;
+	bool player_phase;
+	int t;
+};
+typedef struct game_state_t game_state_t;
+
+void handle_mouse_click(map_t* map, game_state_t* gs, bool is_left_click)
 {
 	cell_t* old_selected = map_selected_cell(map);
 	map_clear_selected(map);
@@ -355,9 +369,17 @@ void handle_mouse_click(map_t* map)
 		map->motion.t_max = 7;
 		map_cell_coords(map, old_selected, &map->motion.src_x, &map->motion.src_y);
 		map_cell_coords(map, new_selected, &map->motion.dst_x, &map->motion.dst_y);
-		map->motion.object = old_selected->object;
-		map->motion.object.can_still_move = false;
-		old_selected->object = (object_t){0};
+		if (is_left_click)
+		{
+			map->motion.object = old_selected->object;
+			map->motion.object.can_still_move = false;
+			old_selected->object = (object_t){0};
+		}
+		else if (gs->tower_available)
+		{
+			map->motion.object = (object_t){.type = OBJECT_TOWER};
+			gs->tower_available = false;
+		}
 		map_clear_green(map);
 		return;
 	}
@@ -380,13 +402,6 @@ void handle_mouse_click(map_t* map)
 		}
 	}
 }
-
-struct game_state_t
-{
-	bool player_phase;
-	int t;
-};
-typedef struct game_state_t game_state_t;
 
 bool game_play_enemy(map_t* map)
 {
@@ -480,6 +495,7 @@ void start_enemy_phase(game_state_t* gs, map_t* map)
 void start_player_phase(game_state_t* gs, map_t* map)
 {
 	gs->player_phase = true;
+	gs->tower_available = true;
 	gs->t = 0;
 	map_clear_can_still_move(map);
 
@@ -561,6 +577,7 @@ int main(void)
 	map_generate(map);
 
 	game_state_t* gs = malloc(sizeof(game_state_t));
+	gs->tower_available = true;
 	gs->player_phase = true;
 	gs->t = 0;
 
@@ -594,9 +611,10 @@ int main(void)
 					handle_mouse_motion(map, event.motion.x, event.motion.y);
 				break;
 				case SDL_MOUSEBUTTONDOWN:
-					if (event.button.button == SDL_BUTTON_LEFT && gs->player_phase)
+					if (gs->player_phase)
 					{
-						handle_mouse_click(map);
+						handle_mouse_click(map, gs,
+							event.button.button == SDL_BUTTON_LEFT);
 					}
 				break;
 			}
