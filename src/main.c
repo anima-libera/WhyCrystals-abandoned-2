@@ -395,6 +395,7 @@ void handle_mouse_click(map_t* map, game_state_t* gs, bool is_left_click)
 		{
 			map->motion.object = (object_t){.type = OBJECT_TOWER};
 			gs->tower_available = false;
+			old_selected->object.can_still_move = false;
 		}
 		map_clear_green(map);
 		return;
