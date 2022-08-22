@@ -271,7 +271,7 @@ void map_generate(map_t* map)
 	map_cell(map, 7, 6)->object.can_still_move = true;
 
 	map_cell(map, 2, 7)->object.type = OBJECT_TOWER;
-	map_cell(map, 2, 7)->object.counter = 6;
+	map_cell(map, 2, 7)->object.counter = 2;
 }
 
 void map_clear_green(map_t* map)
@@ -408,7 +408,7 @@ void handle_mouse_click(map_t* map, game_state_t* gs, bool is_left_click)
 		}
 		else if (gs->tower_available)
 		{
-			map->motion.object = (object_t){.type = OBJECT_TOWER, .counter = 6};
+			map->motion.object = (object_t){.type = OBJECT_TOWER, .counter = 4};
 			gs->tower_available = false;
 			old_selected->object.can_still_move = false;
 		}
@@ -853,6 +853,10 @@ int main(void)
 					handle_mouse_motion(map, event.motion.x, event.motion.y);
 				break;
 				case SDL_MOUSEBUTTONDOWN:
+					if (event.button.button == SDL_BUTTON_MIDDLE && gs->player_phase)
+					{
+						start_enemy_phase(gs, map);
+					}
 					if (gs->player_phase)
 					{
 						handle_mouse_click(map, gs,
