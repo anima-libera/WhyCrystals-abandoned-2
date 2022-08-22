@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
+#include <time.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include "embedded.h"
@@ -279,6 +280,10 @@ void map_generate(map_t* map)
 		{
 			map_cell(map, x, y)->object.type = OBJECT_ROCK;
 		}
+		else if (rand() % 13 == 3)
+		{
+			map_cell(map, x, y)->object.type = OBJECT_TREE;
+		}
 	}
 
 	map_cell(map, 4, 5)->object.type = OBJECT_CRYSTAL;
@@ -550,7 +555,8 @@ bool game_play_enemy(map_t* map, game_state_t* gs)
 		}
 	}
 
-	if ((rand() >> 3) % 2 == 0 && map_cell(map, 0, 0)->object.type == OBJECT_NONE)
+	if ((rand() >> 3) % 2 == 0 &&
+		map_cell(map, 0, 0)->object.type != OBJECT_UNIT_ENEMY)
 	{
 		map->motion.t = 0;
 		map->motion.t_max = 6;
@@ -563,7 +569,8 @@ bool game_play_enemy(map_t* map, game_state_t* gs)
 		return false;
 	}
 
-	if ((rand() >> 3) % 2 == 0 && map_cell(map, map->grid_side-1, 0)->object.type == OBJECT_NONE)
+	if ((rand() >> 3) % 2 == 0 &&
+		map_cell(map, map->grid_side-1, 0)->object.type != OBJECT_UNIT_ENEMY)
 	{
 		map->motion.t = 0;
 		map->motion.t_max = 6;
@@ -799,6 +806,8 @@ void game_perform(game_state_t* gs, map_t* map)
 int main(void)
 {
 	printf("hellow, %s", g_asset_test);
+
+	srand(time(NULL));
 
 	if (SDL_Init(SDL_INIT_VIDEO) != 0)
 	{
