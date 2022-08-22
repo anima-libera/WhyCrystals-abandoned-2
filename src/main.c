@@ -67,6 +67,7 @@ enum object_type_t
 	OBJECT_SHOT,
 	OBJECT_CRYSTAL,
 	OBJECT_EGG,
+	OBJECT_TREE,
 };
 typedef enum object_type_t object_type_t;
 
@@ -74,6 +75,7 @@ struct object_t
 {
 	object_type_t type;
 	bool can_still_move;
+	int counter;
 };
 typedef struct object_t object_t;
 
@@ -106,6 +108,9 @@ void draw_object(object_t const* object, int x, int y, int side)
 		break;
 		case OBJECT_EGG:
 			src_rect = &g_ss.rect_egg;
+		break;
+		case OBJECT_TREE:
+			src_rect = &g_ss.rect_tree;
 		break;
 	}
 	SDL_RenderCopy(g_renderer, g_ss.texture, src_rect, &dst_rect);
@@ -266,6 +271,7 @@ void map_generate(map_t* map)
 	map_cell(map, 7, 6)->object.can_still_move = true;
 
 	map_cell(map, 2, 7)->object.type = OBJECT_TOWER;
+	map_cell(map, 2, 7)->object.counter = 6;
 }
 
 void map_clear_green(map_t* map)
@@ -375,6 +381,14 @@ void handle_mouse_click(map_t* map, game_state_t* gs, bool is_left_click)
 	map_clear_selected(map);
 	cell_t* new_selected = map_hovered_cell(map);
 	new_selected->is_selected = true;
+	if (new_selected->object.type == OBJECT_TOWER)
+	{
+		int x, y;
+		map_cell_coords(map, new_selected, &x, &y);
+		printf("%d ammo left (%d, %d)\n",
+			new_selected->object.counter,
+			x, y);
+	}
 	if (map->motion.t_max > 0)
 	{
 		return;
@@ -394,7 +408,7 @@ void handle_mouse_click(map_t* map, game_state_t* gs, bool is_left_click)
 		}
 		else if (gs->tower_available)
 		{
-			map->motion.object = (object_t){.type = OBJECT_TOWER};
+			map->motion.object = (object_t){.type = OBJECT_TOWER, .counter = 6};
 			gs->tower_available = false;
 			old_selected->object.can_still_move = false;
 		}
@@ -488,6 +502,7 @@ bool game_play_enemy(map_t* map, game_state_t* gs)
 			if (dst_cell->object.type != OBJECT_CRYSTAL &&
 				dst_cell->object.type != OBJECT_UNIT_CONTROLLED &&
 				dst_cell->object.type != OBJECT_TOWER &&
+				dst_cell->object.type != OBJECT_TREE &&
 				(dst_cell == src_cell || dst_cell->object.type != OBJECT_NONE))
 			{
 				src_cell->object.can_still_move = false;
@@ -564,7 +579,13 @@ void tower_shoot(map_t* map, int tower_x, int tower_y, int target_x, int target_
 	map->motion.dst_x = target_x;
 	map->motion.dst_y = target_y;
 	map->motion.object = (object_t){.type = OBJECT_SHOT};
-	map_cell(map, tower_x, tower_y)->object.can_still_move = false;
+	cell_t* cell = map_cell(map, tower_x, tower_y);
+	cell->object.can_still_move = false;
+	cell->object.counter--;
+	if (cell->object.counter <= 0)
+	{
+		cell->object.type = OBJECT_TREE;
+	}
 }
 
 bool game_play_towers(map_t* map)
