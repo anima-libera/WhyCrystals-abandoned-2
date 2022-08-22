@@ -365,6 +365,7 @@ struct game_state_t
 	bool tower_phase;
 	int t;
 	bool game_is_lost;
+	int turn_number;
 };
 typedef struct game_state_t game_state_t;
 
@@ -420,7 +421,7 @@ void handle_mouse_click(map_t* map, game_state_t* gs, bool is_left_click)
 	}
 }
 
-bool game_play_enemy(map_t* map)
+bool game_play_enemy(map_t* map, game_state_t* gs)
 {
 	for (int y = 0; y < map->grid_side; y++)
 	for (int x = 0; x < map->grid_side; x++)
@@ -537,6 +538,18 @@ bool game_play_enemy(map_t* map)
 		map->motion.object = (object_t){.type = OBJECT_UNIT_ENEMY};
 		map->motion.object.can_still_move = false;
 		return false;
+	}
+
+	if (gs->turn_number > 0 && gs->turn_number % 13 == 0)
+	{
+		for (int y = map->grid_side - 2; y < map->grid_side; y++)
+		for (int x = 0; x < map->grid_side; x++)
+		{
+			if ((rand() >> 4) % 4 <= 2)
+			{
+				map_cell(map, x, y)->object.type = OBJECT_EGG;
+			}
+		}
 	}
 
 	return true;
@@ -673,6 +686,7 @@ void start_player_phase(game_state_t* gs, map_t* map)
 		return;
 	}
 
+	gs->turn_number++;
 	gs->player_phase = true;
 	gs->tower_phase = false;
 	gs->tower_available = true;
@@ -700,7 +714,7 @@ void game_perform(game_state_t* gs, map_t* map)
 			if (dst_cell->object.type == OBJECT_CRYSTAL)
 			{
 				gs->game_is_lost = true;
-				printf("The crystal is destroyed: game over.\n");
+				printf("Crystal destroyed, game over on turn %d\n", gs->turn_number);
 			}
 			if (map->motion.object.type == OBJECT_SHOT)
 			{
@@ -719,7 +733,7 @@ void game_perform(game_state_t* gs, map_t* map)
 		gs->t++;
 		if (gs->t % 3 == 0)
 		{
-			bool const enemy_is_done = game_play_enemy(map);
+			bool const enemy_is_done = game_play_enemy(map, gs);
 			if (enemy_is_done)
 			{
 				start_tower_phase(gs, map);
@@ -786,6 +800,7 @@ int main(void)
 	gs->tower_phase = false;
 	gs->t = 0;
 	gs->game_is_lost = false;
+	gs->turn_number = 0;
 
 	bool running = true;
 	while (running)
@@ -832,6 +847,11 @@ int main(void)
 		SDL_RenderClear(g_renderer);
 		draw_map(map);
 		SDL_RenderPresent(g_renderer);
+	}
+
+	if (!gs->game_is_lost)
+	{
+		printf("Quit on turn %d\n", gs->turn_number);
 	}
 
 	IMG_Quit(); 
