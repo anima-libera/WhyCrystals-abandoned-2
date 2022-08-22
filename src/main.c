@@ -603,7 +603,7 @@ bool game_play_towers(map_t* map)
 						continue;
 					}
 					object_type_t type = map_cell(map, dirs[i].x, dirs[i].y)->object.type;
-					if (type == OBJECT_UNIT_ENEMY)
+					if (type == OBJECT_UNIT_ENEMY || type == OBJECT_EGG)
 					{
 						tower_shoot(map, x, y, dirs[i].x, dirs[i].y);
 						return false;
