@@ -65,6 +65,7 @@ enum object_type_t
 	OBJECT_UNIT_ENEMY,
 	OBJECT_TOWER,
 	OBJECT_SHOT,
+	OBJECT_CRYSTAL,
 };
 typedef enum object_type_t object_type_t;
 
@@ -98,6 +99,9 @@ void draw_object(object_t const* object, int x, int y, int side)
 		break;
 		case OBJECT_SHOT:
 			src_rect = &g_ss.rect_shot;
+		break;
+		case OBJECT_CRYSTAL:
+			src_rect = &g_ss.rect_crystal;
 		break;
 	}
 	SDL_RenderCopy(g_renderer, g_ss.texture, src_rect, &dst_rect);
@@ -248,6 +252,8 @@ void map_generate(map_t* map)
 		}
 	}
 
+	map_cell(map, 4, 5)->object.type = OBJECT_CRYSTAL;
+
 	map_cell(map, 5, 6)->object.type = OBJECT_UNIT_CONTROLLED;
 	map_cell(map, 5, 6)->object.can_still_move = true;
 	map_cell(map, 6, 6)->object.type = OBJECT_UNIT_CONTROLLED;
@@ -255,7 +261,8 @@ void map_generate(map_t* map)
 	map_cell(map, 7, 6)->object.type = OBJECT_UNIT_CONTROLLED;
 	map_cell(map, 7, 6)->object.can_still_move = true;
 
-	map_cell(map, 3, 7)->object.type = OBJECT_TOWER;
+
+	map_cell(map, 2, 7)->object.type = OBJECT_TOWER;
 }
 
 void map_clear_green(map_t* map)
@@ -354,6 +361,7 @@ struct game_state_t
 	bool player_phase;
 	bool tower_phase;
 	int t;
+	bool game_is_lost;
 };
 typedef struct game_state_t game_state_t;
 
@@ -419,13 +427,29 @@ bool game_play_enemy(map_t* map)
 			assert(src_cell->object.type == OBJECT_UNIT_ENEMY);
 			int dst_x = x, dst_y = y;
 
-			if ((rand() >> 5) % 2)
+			if ((rand() >> 5) % 5 == 4)
 			{
-				dst_x += rand() % 2 ? 1 : -1;
+				if ((rand() >> 5) % 2)
+				{
+					dst_x += rand() % 2 ? 1 : -1;
+				}
+				else
+				{
+					dst_y += rand() % 2 ? 1 : -1;
+				}
 			}
 			else
 			{
-				dst_y += rand() % 2 ? 1 : -1;
+				int const crystal_x = 4, crystal_y = 5;
+				bool move_x = rand() % 2 == 0 && x != crystal_x;
+				if (move_x)
+				{
+					dst_x += x < crystal_x ? 1 : -1;
+				}
+				else
+				{
+					dst_y += y < crystal_y ? 1 : -1;
+				}
 			}
 
 			if (dst_x < 0)
@@ -446,7 +470,8 @@ bool game_play_enemy(map_t* map)
 			}
 
 			cell_t* dst_cell = map_cell(map, dst_x, dst_y);
-			if (dst_cell == src_cell || dst_cell->object.type != OBJECT_NONE)
+			if (dst_cell->object.type != OBJECT_CRYSTAL &&
+				(dst_cell == src_cell || dst_cell->object.type != OBJECT_NONE))
 			{
 				src_cell->object.can_still_move = false;
 				return false;
@@ -462,13 +487,26 @@ bool game_play_enemy(map_t* map)
 		}
 	}
 
-	if ((rand() >> 3) % 8 == 3 && map_cell(map, 0, 0)->object.type == OBJECT_NONE)
+	if ((rand() >> 3) % 2 == 0 && map_cell(map, 0, 0)->object.type == OBJECT_NONE)
 	{
 		map->motion.t = 0;
 		map->motion.t_max = 6;
 		map->motion.src_x = -1;
 		map->motion.src_y = -1;
 		map->motion.dst_x = 0;
+		map->motion.dst_y = 0;
+		map->motion.object = (object_t){.type = OBJECT_UNIT_ENEMY};
+		map->motion.object.can_still_move = false;
+		return false;
+	}
+
+	if ((rand() >> 3) % 2 == 0 && map_cell(map, map->grid_side-1, 0)->object.type == OBJECT_NONE)
+	{
+		map->motion.t = 0;
+		map->motion.t_max = 6;
+		map->motion.src_x = map->grid_side;
+		map->motion.src_y = -1;
+		map->motion.dst_x = map->grid_side-1;
 		map->motion.dst_y = 0;
 		map->motion.object = (object_t){.type = OBJECT_UNIT_ENEMY};
 		map->motion.object.can_still_move = false;
@@ -602,6 +640,13 @@ void start_tower_phase(game_state_t* gs, map_t* map)
 
 void start_player_phase(game_state_t* gs, map_t* map)
 {
+	if (gs->game_is_lost)
+	{
+		printf("The crystal is destroyed: game over.\n");
+		start_enemy_phase(gs, map);
+		return;
+	}
+
 	gs->player_phase = true;
 	gs->tower_phase = false;
 	gs->tower_available = true;
@@ -626,6 +671,10 @@ void game_perform(game_state_t* gs, map_t* map)
 		if (map->motion.t >= map->motion.t_max)
 		{
 			cell_t* dst_cell = map_cell(map, map->motion.dst_x, map->motion.dst_y);
+			if (dst_cell->object.type == OBJECT_CRYSTAL)
+			{
+				gs->game_is_lost = true;
+			}
 			if (map->motion.object.type == OBJECT_SHOT)
 			{
 				dst_cell->object = (object_t){0};
@@ -709,6 +758,7 @@ int main(void)
 	gs->player_phase = true;
 	gs->tower_phase = false;
 	gs->t = 0;
+	gs->game_is_lost = false;
 
 	bool running = true;
 	while (running)
