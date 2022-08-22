@@ -66,6 +66,7 @@ enum object_type_t
 	OBJECT_TOWER,
 	OBJECT_SHOT,
 	OBJECT_CRYSTAL,
+	OBJECT_EGG,
 };
 typedef enum object_type_t object_type_t;
 
@@ -102,6 +103,9 @@ void draw_object(object_t const* object, int x, int y, int side)
 		break;
 		case OBJECT_CRYSTAL:
 			src_rect = &g_ss.rect_crystal;
+		break;
+		case OBJECT_EGG:
+			src_rect = &g_ss.rect_egg;
 		break;
 	}
 	SDL_RenderCopy(g_renderer, g_ss.texture, src_rect, &dst_rect);
@@ -260,7 +264,6 @@ void map_generate(map_t* map)
 	map_cell(map, 6, 6)->object.can_still_move = true;
 	map_cell(map, 7, 6)->object.type = OBJECT_UNIT_CONTROLLED;
 	map_cell(map, 7, 6)->object.can_still_move = true;
-
 
 	map_cell(map, 2, 7)->object.type = OBJECT_TOWER;
 }
@@ -424,6 +427,16 @@ bool game_play_enemy(map_t* map)
 		cell_t* src_cell = map_cell(map, x, y);
 		if (src_cell->object.can_still_move)
 		{
+			if (src_cell->object.type == OBJECT_EGG)
+			{
+				src_cell->object.can_still_move = false;
+				if (rand() % 4 == 0)
+				{
+					src_cell->object.type = OBJECT_UNIT_ENEMY;
+				}
+				return false;
+			}
+
 			assert(src_cell->object.type == OBJECT_UNIT_ENEMY);
 			int dst_x = x, dst_y = y;
 
@@ -478,13 +491,23 @@ bool game_play_enemy(map_t* map)
 				src_cell->object.can_still_move = false;
 				return false;
 			}
+
+			bool lay_egg = rand() % 11 == 0;
+
 			map->motion.t = 0;
 			map->motion.t_max = 6;
 			map_cell_coords(map, src_cell, &map->motion.src_x, &map->motion.src_y);
 			map_cell_coords(map, dst_cell, &map->motion.dst_x, &map->motion.dst_y);
-			map->motion.object = src_cell->object;
-			map->motion.object.can_still_move = false;
-			src_cell->object = (object_t){0};
+			src_cell->object.can_still_move = false;
+			if (lay_egg)
+			{
+				map->motion.object = (object_t){.type = OBJECT_EGG};
+			}
+			else
+			{
+				map->motion.object = src_cell->object;
+				src_cell->object = (object_t){0};
+			}
 			return false;
 		}
 	}
@@ -613,7 +636,8 @@ void start_enemy_phase(game_state_t* gs, map_t* map)
 	for (int x = 0; x < map->grid_side; x++)
 	{
 		cell_t* cell = map_cell(map, x, y);
-		if (cell->object.type == OBJECT_UNIT_ENEMY)
+		if (cell->object.type == OBJECT_UNIT_ENEMY ||
+			cell->object.type == OBJECT_EGG)
 		{
 			cell->object.can_still_move = true;
 		}
