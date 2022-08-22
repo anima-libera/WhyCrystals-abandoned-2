@@ -400,8 +400,6 @@ bool game_play_enemy(map_t* map)
 				src_cell->object.can_still_move = false;
 				return false;
 			}
-			//dst_cell->object = src_cell->object;
-			//dst_cell->object.can_still_move = false;
 			map->motion.t = 0;
 			map->motion.t_max = 6;
 			map_cell_coords(map, src_cell, &map->motion.src_x, &map->motion.src_y);
@@ -412,6 +410,20 @@ bool game_play_enemy(map_t* map)
 			return false;
 		}
 	}
+
+	if ((rand() >> 3) % 8 == 3 && map_cell(map, 0, 0)->object.type == OBJECT_NONE)
+	{
+		map->motion.t = 0;
+		map->motion.t_max = 6;
+		map->motion.src_x = -1;
+		map->motion.src_y = -1;
+		map->motion.dst_x = 0;
+		map->motion.dst_y = 0;
+		map->motion.object = (object_t){.type = OBJECT_UNIT_ENEMY};
+		map->motion.object.can_still_move = false;
+		return false;
+	}
+
 	return true;
 }
 
