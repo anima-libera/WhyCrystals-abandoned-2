@@ -143,10 +143,21 @@ void draw_cell(cell_t const* cell, int x, int y, int side)
 	draw_object(&cell->object, x, y, side);
 }
 
+struct motion_t
+{
+	int t;
+	int t_max;
+	int src_x, src_y;
+	int dst_x, dst_y;
+	object_t object;
+};
+typedef struct motion_t motion_t;
+
 struct map_t
 {
 	int grid_side;
 	cell_t* grid;
+	motion_t motion;
 };
 typedef struct map_t map_t;
 
@@ -162,6 +173,17 @@ void draw_map(map_t* map)
 	{
 		draw_cell(map_cell(map, x, y),
 			x * CELL_SIDE_PIXELS, y * CELL_SIDE_PIXELS, CELL_SIDE_PIXELS);
+	}
+
+	if (map->motion.t_max > 0)
+	{
+		motion_t* m = &map->motion;
+		float r = (float)m->t / (float)m->t_max;
+		float x = (float)m->src_x * (1.0f - r) + (float)m->dst_x * r;
+		float y = (float)m->src_y * (1.0f - r) + (float)m->dst_y * r;
+		draw_object(&m->object,
+			x * (float)CELL_SIDE_PIXELS, y * (float)CELL_SIDE_PIXELS,
+			CELL_SIDE_PIXELS);
 	}
 }
 
@@ -292,11 +314,19 @@ void handle_mouse_click(map_t* map)
 	map_clear_selected(map);
 	cell_t* new_selected = map_hovered_cell(map);
 	new_selected->is_selected = true;
+	if (map->motion.t_max > 0)
+	{
+		return;
+	}
 	if (new_selected->is_green)
 	{
 		assert(old_selected->object.type == OBJECT_UNIT_CONTROLLED);
-		new_selected->object = old_selected->object;
-		new_selected->object.can_still_move = false;
+		map->motion.t = 0;
+		map->motion.t_max = 7;
+		map_cell_coords(map, old_selected, &map->motion.src_x, &map->motion.src_y);
+		map_cell_coords(map, new_selected, &map->motion.dst_x, &map->motion.dst_y);
+		map->motion.object = old_selected->object;
+		map->motion.object.can_still_move = false;
 		old_selected->object = (object_t){0};
 		map_clear_green(map);
 		return;
@@ -371,8 +401,14 @@ bool game_play_enemy(map_t* map)
 				src_cell->object.can_still_move = false;
 				return false;
 			}
-			dst_cell->object = src_cell->object;
-			dst_cell->object.can_still_move = false;
+			//dst_cell->object = src_cell->object;
+			//dst_cell->object.can_still_move = false;
+			map->motion.t = 0;
+			map->motion.t_max = 6;
+			map_cell_coords(map, src_cell, &map->motion.src_x, &map->motion.src_y);
+			map_cell_coords(map, dst_cell, &map->motion.dst_x, &map->motion.dst_y);
+			map->motion.object = src_cell->object;
+			map->motion.object.can_still_move = false;
 			src_cell->object = (object_t){0};
 			return false;
 		}
@@ -418,10 +454,20 @@ void start_player_phase(game_state_t* gs, map_t* map)
 
 void game_perform(game_state_t* gs, map_t* map)
 {
-	if (!gs->player_phase)
+	if (map->motion.t_max > 0)
+	{
+		if (map->motion.t >= map->motion.t_max)
+		{
+			cell_t* dst_cell = map_cell(map, map->motion.dst_x, map->motion.dst_y);
+			dst_cell->object = map->motion.object;
+			map->motion = (motion_t){0};
+		}
+		map->motion.t++;
+	}
+	else if (!gs->player_phase)
 	{
 		gs->t++;
-		if (gs->t % 10 == 0)
+		if (gs->t % 3 == 0)
 		{
 			bool const enemy_is_done = game_play_enemy(map);
 			if (enemy_is_done)
@@ -469,6 +515,7 @@ int main(void)
 	map_t* map = malloc(sizeof(map_t));
 	map->grid_side = WINDOW_SIDE / CELL_SIDE_PIXELS;
 	map->grid = calloc(map->grid_side * map->grid_side, sizeof(cell_t));
+	map->motion = (motion_t){0};
 	map_generate(map);
 
 	game_state_t* gs = malloc(sizeof(game_state_t));
