@@ -194,20 +194,19 @@ void map_generate(map_t* map)
 	{
 		map_cell(map, x, y)->object = (object_t){0};
 
-		if ((x ^ (y + 1)) % 7 == 1)
+		if (rand() % 7 == 1)
 		{
 			map_cell(map, x, y)->floor = FLOOR_DESERT;
 		}
 
-		if (((x - 2) ^ (y + 2)) % 31 == 1)
+		if (rand() % 21 == 1)
 		{
 			map_cell(map, x, y)->object.type = OBJECT_UNIT_ENEMY;
 		}
-		if ((x ^ (y + 3)) % 13 == 3)
+		if (rand() % 13 == 3)
 		{
 			map_cell(map, x, y)->object.type = OBJECT_ROCK;
 		}
-
 	}
 
 	map_cell(map, 5, 6)->object.type = OBJECT_UNIT_CONTROLLED;
