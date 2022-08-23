@@ -1104,6 +1104,10 @@ int main(void)
 		char string[60];
 		sprintf(string, "TURN %d", gs->turn_number);
 		draw_text(string, 0, 0, 0, 0, 0, false);
+		if (gs->game_is_lost)
+		{
+			draw_text("GAME OVER", 0, 0, 0, 0, 20, false);
+		}
 		
 		SDL_RenderPresent(g_renderer);
 	}
