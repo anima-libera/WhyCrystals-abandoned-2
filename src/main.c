@@ -301,7 +301,7 @@ void map_generate(map_t* map)
 		{
 			map_cell(map, x, y)->object.type = OBJECT_UNIT_ENEMY;
 		}
-		if (rand() % 13 == 3)
+		else if (rand() % 13 == 3)
 		{
 			map_cell(map, x, y)->object.type = OBJECT_ROCK;
 		}
@@ -311,17 +311,31 @@ void map_generate(map_t* map)
 		}
 	}
 
-	map_cell(map, 4, 5)->object.type = OBJECT_CRYSTAL;
+	int cx = map->grid_side / 2 + rand() % 5 - 2;
+	int cy = map->grid_side / 2 + rand() % 5 - 2;
+	map_cell(map, cx, cy)->object.type = OBJECT_CRYSTAL;
 
-	map_cell(map, 5, 6)->object.type = OBJECT_UNIT_CONTROLLED;
-	map_cell(map, 5, 6)->object.can_still_move = true;
-	map_cell(map, 6, 6)->object.type = OBJECT_UNIT_CONTROLLED;
-	map_cell(map, 6, 6)->object.can_still_move = true;
-	map_cell(map, 7, 6)->object.type = OBJECT_UNIT_CONTROLLED;
-	map_cell(map, 7, 6)->object.can_still_move = true;
+	int ux, uy;
+	ux = cx; uy = cy; *(rand() % 2 ? &ux : &uy) += 1;
+	map_cell(map, ux, uy)->object.type = OBJECT_UNIT_CONTROLLED;
+	ux = cx; uy = cy; *(rand() % 2 ? &ux : &uy) -= 1;
+	map_cell(map, ux, uy)->object.type = OBJECT_UNIT_CONTROLLED;
+	ux = cx; uy = cy; *(rand() % 2 ? &ux : &uy) += rand() % 2 ? 2 : -2;
+	map_cell(map, ux, uy)->object.type = OBJECT_UNIT_CONTROLLED;
 
-	map_cell(map, 2, 7)->object.type = OBJECT_TOWER;
-	map_cell(map, 2, 7)->object.counter = 2;
+	ux = cx; uy = cy; ux += rand() % 2 ? 1 : -1; uy += rand() % 2 ? 1 : -1;
+	map_cell(map, ux, uy)->object.type = OBJECT_TOWER;
+	map_cell(map, ux, uy)->object.counter = 2;
+
+	for (int y = cy - 2; y < cy + 3; y++)
+	for (int x = cx - 2; x < cx + 3; x++)
+	{
+		cell_t* cell = map_cell(map, x, y);
+		if (cell->object.type == OBJECT_UNIT_ENEMY)
+		{
+			cell->object.type = OBJECT_EGG;
+		}
+	}
 }
 
 void map_clear_green(map_t* map)
@@ -387,6 +401,20 @@ cell_t* map_selected_cell(map_t* map)
 	{
 		cell_t* cell = map_cell(map, x, y);
 		if (cell->is_selected)
+		{
+			return cell;
+		}
+	}
+	return NULL;
+}
+
+cell_t* map_crystal_cell(map_t* map)
+{
+	for (int y = 0; y < map->grid_side; y++)
+	for (int x = 0; x < map->grid_side; x++)
+	{
+		cell_t* cell = map_cell(map, x, y);
+		if (cell->object.type == OBJECT_CRYSTAL)
 		{
 			return cell;
 		}
@@ -511,7 +539,13 @@ bool game_play_enemy(map_t* map, game_state_t* gs)
 				}
 				else
 				{
-					int const crystal_x = 4, crystal_y = 5;
+					int crystal_x = map->grid_side / 2;
+					int crystal_y = map->grid_side / 2;
+					cell_t* crystal_cell = map_crystal_cell(map);
+					if (crystal_cell != NULL)
+					{
+						map_cell_coords(map, crystal_cell, &crystal_x, &crystal_y);
+					}
 					bool move_x = rand() % 2 == 0 && x != crystal_x;
 					if (move_x)
 					{
@@ -644,7 +678,13 @@ bool game_play_enemy(map_t* map, game_state_t* gs)
 				}
 				else
 				{
-					int const crystal_x = 4, crystal_y = 5;
+					int crystal_x = map->grid_side / 2;
+					int crystal_y = map->grid_side / 2;
+					cell_t* crystal_cell = map_crystal_cell(map);
+					if (crystal_cell != NULL)
+					{
+						map_cell_coords(map, crystal_cell, &crystal_x, &crystal_y);
+					}
 					bool move_x = rand() % 2 == 0 && x != crystal_x;
 					if (move_x)
 					{
@@ -1041,6 +1081,8 @@ int main(void)
 	gs->t = 0;
 	gs->game_is_lost = false;
 	gs->turn_number = 0;
+
+	start_player_phase(gs, map);
 
 	bool running = true;
 	while (running)
