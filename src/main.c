@@ -440,14 +440,6 @@ void handle_mouse_click(map_t* map, game_state_t* gs, bool is_left_click)
 	map_clear_selected(map);
 	cell_t* new_selected = map_hovered_cell(map);
 	new_selected->is_selected = true;
-	if (new_selected->object.type == OBJECT_TOWER)
-	{
-		int x, y;
-		map_cell_coords(map, new_selected, &x, &y);
-		printf("%d ammo left (%d, %d)\n",
-			new_selected->object.counter,
-			x, y);
-	}
 	if (map->motion.t_max > 0)
 	{
 		return;
@@ -1106,7 +1098,13 @@ int main(void)
 
 		SDL_SetRenderDrawColor(g_renderer, 30, 40, 80, 255);
 		SDL_RenderClear(g_renderer);
+		
 		draw_map(map);
+
+		char string[60];
+		sprintf(string, "TURN %d", gs->turn_number);
+		draw_text(string, 0, 0, 0, 0, 0, false);
+		
 		SDL_RenderPresent(g_renderer);
 	}
 
