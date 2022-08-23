@@ -86,6 +86,7 @@ def get_build_mode(options: Options) -> BuildMode:
 	else:
 		linking_command_args.append("`sdl2-config --cflags --libs`")
 	linking_command_args.append("-lSDL2_image")
+	linking_command_args.append("-lSDL2_ttf")
 	linking_command = " ".join(linking_command_args)
 
 	return BuildMode(compilation_command, linking_command)

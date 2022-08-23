@@ -6,9 +6,11 @@
 #include <time.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
+#include <SDL2/SDL_ttf.h>
 #include "embedded.h"
 
 SDL_Renderer* g_renderer;
+TTF_Font* g_font;
 
 #define CELL_SIDE_PIXELS 64
 #define WINDOW_SIDE (800 - 800 % CELL_SIDE_PIXELS)
@@ -72,6 +74,27 @@ void sprite_sheet_load(sprite_sheet_t* ss)
 	rect.x = 0; rect.y += 16;
 	ss->rect_grassland = rect; rect.x += 16;
 	ss->rect_desert = rect; rect.x += 16;
+}
+
+void draw_text(char* text, int r, int g, int b, int x, int y, bool center_x)
+{
+	SDL_Color color = {.r = r, .g = g, .b = b, .a = 255};
+	SDL_Surface* surface = TTF_RenderText_Solid(g_font, text, color);
+	if (surface == NULL)
+	{
+		return NULL;
+	}
+	SDL_Texture* texture = SDL_CreateTextureFromSurface(g_renderer, surface);
+	if (texture == NULL)
+	{
+		return NULL;
+	}
+	SDL_FreeSurface(surface);
+	SDL_Rect rect = {.y = y};
+	SDL_QueryTexture(texture, NULL, NULL, &rect.w, &rect.h);
+	rect.x = center_x ? x-rect.w/2 : x;
+	SDL_RenderCopy(g_renderer, texture, NULL, &rect);
+	SDL_DestroyTexture(texture);
 }
 
 enum object_type_t
@@ -218,6 +241,13 @@ void draw_cell(cell_t const* cell, int x, int y, int side)
 	}
 
 	draw_object(&cell->object, x, y, side);
+
+	if ((cell->is_selected || cell->is_hovered) && cell->object.type == OBJECT_TOWER)
+	{
+		char string[20];
+		sprintf(string, "%d", cell->object.counter);
+		draw_text(string, 0, 0, 0, dst_rect.x + 3, dst_rect.y - 1, false);
+	}
 }
 
 struct motion_t
@@ -999,6 +1029,20 @@ int main(void)
 		exit(-1);
 	}
 
+	if (TTF_Init() < 0)
+	{
+		printf("TODO: Handle error.\n");
+		exit(-1);
+	}
+
+	g_font = TTF_OpenFontRW(SDL_RWFromConstMem(
+		g_asset_font, g_asset_font_size), 0, 20);
+	if (g_font == NULL)
+	{
+		printf("TODO: Handle error.\n");
+		exit(-1);
+	}
+
 	sprite_sheet_load(&g_ss);
 	
 	map_t* map = malloc(sizeof(map_t));
@@ -1071,6 +1115,7 @@ int main(void)
 		printf("Quit on turn %d\n", gs->turn_number);
 	}
 
+	TTF_Quit();
 	IMG_Quit(); 
 	SDL_DestroyRenderer(g_renderer);
 	SDL_DestroyWindow(window);
