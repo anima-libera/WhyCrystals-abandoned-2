@@ -80,6 +80,7 @@ enum object_type_t
 	OBJECT_ROCK,
 	OBJECT_UNIT_CONTROLLED,
 	OBJECT_UNIT_ENEMY,
+	OBJECT_UNIT_ENEMY_BIG,
 	OBJECT_TOWER,
 	OBJECT_TOWER_OFF,
 	OBJECT_SHOT,
@@ -114,6 +115,9 @@ void draw_object(object_t const* object, int x, int y, int side)
 		break;
 		case OBJECT_UNIT_ENEMY:
 			src_rect = &g_ss.rect_unit_enemy;
+		break;
+		case OBJECT_UNIT_ENEMY_BIG:
+			src_rect = &g_ss.rect_unit_enemy_big;
 		break;
 		case OBJECT_TOWER:
 			src_rect = &g_ss.rect_tower;
@@ -477,81 +481,220 @@ bool game_play_enemy(map_t* map, game_state_t* gs)
 				}
 				return false;
 			}
-
-			assert(src_cell->object.type == OBJECT_UNIT_ENEMY);
-			int dst_x = x, dst_y = y;
-
-			if ((rand() >> 5) % 5 == 4)
+			else if (src_cell->object.type == OBJECT_UNIT_ENEMY)
 			{
-				if ((rand() >> 5) % 2)
+				int dst_x = x, dst_y = y;
+
+				if ((rand() >> 5) % 5 == 4)
 				{
-					dst_x += rand() % 2 ? 1 : -1;
+					if ((rand() >> 5) % 2)
+					{
+						dst_x += rand() % 2 ? 1 : -1;
+					}
+					else
+					{
+						dst_y += rand() % 2 ? 1 : -1;
+					}
 				}
 				else
 				{
-					dst_y += rand() % 2 ? 1 : -1;
+					int const crystal_x = 4, crystal_y = 5;
+					bool move_x = rand() % 2 == 0 && x != crystal_x;
+					if (move_x)
+					{
+						dst_x += x < crystal_x ? 1 : -1;
+					}
+					else
+					{
+						dst_y += y < crystal_y ? 1 : -1;
+					}
 				}
-			}
-			else
-			{
-				int const crystal_x = 4, crystal_y = 5;
-				bool move_x = rand() % 2 == 0 && x != crystal_x;
-				if (move_x)
-				{
-					dst_x += x < crystal_x ? 1 : -1;
-				}
-				else
-				{
-					dst_y += y < crystal_y ? 1 : -1;
-				}
-			}
 
-			if (dst_x < 0)
-			{
-				dst_x = 0;
-			}
-			else if (dst_x >= map->grid_side)
-			{
-				dst_x = map->grid_side - 1;
-			}
-			if (dst_y < 0)
-			{
-				dst_y = 0;
-			}
-			else if (dst_y >= map->grid_side)
-			{
-				dst_y = map->grid_side - 1;
-			}
+				if (dst_x < 0)
+				{
+					dst_x = 0;
+				}
+				else if (dst_x >= map->grid_side)
+				{
+					dst_x = map->grid_side - 1;
+				}
+				if (dst_y < 0)
+				{
+					dst_y = 0;
+				}
+				else if (dst_y >= map->grid_side)
+				{
+					dst_y = map->grid_side - 1;
+				}
 
-			cell_t* dst_cell = map_cell(map, dst_x, dst_y);
-			if (dst_cell->object.type != OBJECT_CRYSTAL &&
-				dst_cell->object.type != OBJECT_UNIT_CONTROLLED &&
-				dst_cell->object.type != OBJECT_TOWER &&
-				dst_cell->object.type != OBJECT_TOWER_OFF &&
-				dst_cell->object.type != OBJECT_TREE &&
-				(dst_cell == src_cell || dst_cell->object.type != OBJECT_NONE))
-			{
+				cell_t* dst_cell = map_cell(map, dst_x, dst_y);
+				if (dst_cell->object.type != OBJECT_CRYSTAL &&
+					dst_cell->object.type != OBJECT_UNIT_CONTROLLED &&
+					dst_cell->object.type != OBJECT_TOWER &&
+					dst_cell->object.type != OBJECT_TOWER_OFF &&
+					dst_cell->object.type != OBJECT_TREE &&
+					(dst_cell == src_cell || dst_cell->object.type != OBJECT_NONE))
+				{
+					src_cell->object.can_still_move = false;
+					return false;
+				}
+
+				bool lay_egg = rand() % 11 == 0;
+
+				map->motion.t = 0;
+				map->motion.t_max = 6;
+				map_cell_coords(map, src_cell, &map->motion.src_x, &map->motion.src_y);
+				map_cell_coords(map, dst_cell, &map->motion.dst_x, &map->motion.dst_y);
 				src_cell->object.can_still_move = false;
+				if (lay_egg)
+				{
+					map->motion.object = (object_t){.type = OBJECT_EGG};
+				}
+				else
+				{
+					map->motion.object = src_cell->object;
+					src_cell->object = (object_t){0};
+				}
 				return false;
 			}
-
-			bool lay_egg = rand() % 11 == 0;
-
-			map->motion.t = 0;
-			map->motion.t_max = 6;
-			map_cell_coords(map, src_cell, &map->motion.src_x, &map->motion.src_y);
-			map_cell_coords(map, dst_cell, &map->motion.dst_x, &map->motion.dst_y);
-			src_cell->object.can_still_move = false;
-			if (lay_egg)
+			else if (src_cell->object.type == OBJECT_UNIT_ENEMY_BIG)
 			{
-				map->motion.object = (object_t){.type = OBJECT_EGG};
+				struct dir_t
+				{
+					int dx, dy;
+					int x, y;
+					bool is_valid;
+				};
+				typedef struct dir_t dir_t;
+
+				dir_t dirs[4] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+				for (int i = 0; i < 4; i ++)
+				{
+					dirs[i].x = x;
+					dirs[i].y = y;
+					dirs[i].is_valid =
+						dirs[i].x >= 0 && dirs[i].x < map->grid_side &&
+						dirs[i].y >= 0 && dirs[i].y < map->grid_side;
+				}
+
+				bool done = false;
+				while (!done)
+				{
+					done = true;
+					for (int i = 0; i < 4; i ++)
+					{
+						if (!dirs[i].is_valid)
+						{
+							continue;
+						}
+						done = false;
+
+						dirs[i].x += dirs[i].dx;
+						dirs[i].y += dirs[i].dy;
+						if (!(dirs[i].x >= 0 && dirs[i].x < map->grid_side &&
+							dirs[i].y >= 0 && dirs[i].y < map->grid_side))
+						{
+							dirs[i].is_valid = false;
+							continue;
+						}
+						object_type_t type = map_cell(map, dirs[i].x, dirs[i].y)->object.type;
+						if (type == OBJECT_TOWER || type == OBJECT_TOWER_OFF)
+						{
+							map->motion.t = 0;
+							map->motion.t_max = 14;
+							map->motion.src_x = x;
+							map->motion.src_y = y;
+							map->motion.dst_x = dirs[i].x;
+							map->motion.dst_y = dirs[i].y;
+							map->motion.object = (object_t){.type = OBJECT_EGG};
+							return false;
+						}
+						if (type != OBJECT_NONE)
+						{
+							dirs[i].is_valid = false;
+						}
+					}
+				}
+
+				int dst_x = x, dst_y = y;
+
+				if ((rand() >> 5) % 5 == 4)
+				{
+					if ((rand() >> 5) % 2)
+					{
+						dst_x += (rand() % 2 ? 1 : -1) * (rand() % 2 ? 1 : 2);
+					}
+					else
+					{
+						dst_y += (rand() % 2 ? 1 : -1) * (rand() % 2 ? 1 : 2);
+					}
+				}
+				else
+				{
+					int const crystal_x = 4, crystal_y = 5;
+					bool move_x = rand() % 2 == 0 && x != crystal_x;
+					if (move_x)
+					{
+						dst_x += x < crystal_x ? 1 : -1;
+					}
+					else
+					{
+						dst_y += y < crystal_y ? 1 : -1;
+					}
+				}
+
+				if (dst_x < 0)
+				{
+					dst_x = 0;
+				}
+				else if (dst_x >= map->grid_side)
+				{
+					dst_x = map->grid_side - 1;
+				}
+				if (dst_y < 0)
+				{
+					dst_y = 0;
+				}
+				else if (dst_y >= map->grid_side)
+				{
+					dst_y = map->grid_side - 1;
+				}
+
+				cell_t* dst_cell = map_cell(map, dst_x, dst_y);
+				if (dst_cell->object.type != OBJECT_CRYSTAL &&
+					dst_cell->object.type != OBJECT_UNIT_CONTROLLED &&
+					dst_cell->object.type != OBJECT_TOWER &&
+					dst_cell->object.type != OBJECT_TOWER_OFF &&
+					dst_cell->object.type != OBJECT_TREE &&
+					(dst_cell == src_cell || dst_cell->object.type != OBJECT_NONE))
+				{
+					src_cell->object.can_still_move = false;
+					return false;
+				}
+
+				bool lay_egg = rand() % 11 == 0;
+
+				map->motion.t = 0;
+				map->motion.t_max = 6;
+				map_cell_coords(map, src_cell, &map->motion.src_x, &map->motion.src_y);
+				map_cell_coords(map, dst_cell, &map->motion.dst_x, &map->motion.dst_y);
+				src_cell->object.can_still_move = false;
+				if (lay_egg)
+				{
+					map->motion.object = (object_t){.type = OBJECT_EGG};
+				}
+				else
+				{
+					map->motion.object = src_cell->object;
+					src_cell->object = (object_t){0};
+				}
+
+				return false;
 			}
 			else
 			{
-				map->motion.object = src_cell->object;
-				src_cell->object = (object_t){0};
+				assert(false);
 			}
-			return false;
 		}
 	}
 
@@ -583,16 +726,32 @@ bool game_play_enemy(map_t* map, game_state_t* gs)
 		return false;
 	}
 
-	if (gs->turn_number > 0 && gs->turn_number % 13 == 0)
+	if (gs->turn_number > 10 && gs->turn_number % 7 == 0 &&
+		map_cell(map, 0, map->grid_side-1)->object.type != OBJECT_UNIT_ENEMY_BIG)
 	{
-		for (int y = map->grid_side - 2; y < map->grid_side; y++)
-		for (int x = 0; x < map->grid_side; x++)
-		{
-			if ((rand() >> 4) % 4 <= 2)
-			{
-				map_cell(map, x, y)->object.type = OBJECT_EGG;
-			}
-		}
+		map->motion.t = 0;
+		map->motion.t_max = 6;
+		map->motion.src_x = -1;
+		map->motion.src_y = map->grid_side;
+		map->motion.dst_x = 0;
+		map->motion.dst_y = map->grid_side-1;
+		map->motion.object = (object_t){.type = OBJECT_UNIT_ENEMY_BIG};
+		map->motion.object.can_still_move = false;
+		return false;
+	}
+
+	if (gs->turn_number > 10 && gs->turn_number % 7 == 1 &&
+		map_cell(map, map->grid_side-1, map->grid_side-1)->object.type != OBJECT_UNIT_ENEMY_BIG)
+	{
+		map->motion.t = 0;
+		map->motion.t_max = 6;
+		map->motion.src_x = map->grid_side;
+		map->motion.src_y = map->grid_side;
+		map->motion.dst_x = map->grid_side-1;
+		map->motion.dst_y = map->grid_side-1;
+		map->motion.object = (object_t){.type = OBJECT_UNIT_ENEMY_BIG};
+		map->motion.object.can_still_move = false;
+		return false;
 	}
 
 	return true;
@@ -666,7 +825,9 @@ bool game_play_towers(map_t* map)
 						continue;
 					}
 					object_type_t type = map_cell(map, dirs[i].x, dirs[i].y)->object.type;
-					if (type == OBJECT_UNIT_ENEMY || type == OBJECT_EGG)
+					if (type == OBJECT_UNIT_ENEMY ||
+						type == OBJECT_UNIT_ENEMY_BIG ||
+						type == OBJECT_EGG)
 					{
 						tower_shoot(map, x, y, dirs[i].x, dirs[i].y);
 						return false;
@@ -700,6 +861,7 @@ void start_enemy_phase(game_state_t* gs, map_t* map)
 	{
 		cell_t* cell = map_cell(map, x, y);
 		if (cell->object.type == OBJECT_UNIT_ENEMY ||
+			cell->object.type == OBJECT_UNIT_ENEMY_BIG ||
 			cell->object.type == OBJECT_EGG)
 		{
 			cell->object.can_still_move = true;
