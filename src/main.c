@@ -19,7 +19,6 @@ enum floor_type_t
 {
 	FLOOR_FIELD,
 	FLOOR_DESERT,
-	FLOOR_WATER,
 };
 typedef enum floor_type_t floor_type_t;
 
@@ -196,10 +195,6 @@ void draw_cell(cell_t const* cell, int x, int y, int side)
 		case FLOOR_DESERT:
 			src_rect = &g_ss.rect_desert;
 		break;
-		case FLOOR_WATER:
-			printf("TODO: water tile\n");
-			exit(-1);
-		break;
 	}
 	SDL_RenderCopy(g_renderer, g_ss.texture, src_rect, &dst_rect);
 	switch (cell->floor)
@@ -209,10 +204,6 @@ void draw_cell(cell_t const* cell, int x, int y, int side)
 		break;
 		case FLOOR_DESERT:
 			SDL_SetRenderDrawColor(g_renderer, 255, 255, 0, 110);
-		break;
-		case FLOOR_WATER:
-			printf("TODO: water tile\n");
-			exit(-1);
 		break;
 	}
 	SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
