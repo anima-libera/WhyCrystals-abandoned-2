@@ -20,6 +20,8 @@ enum sprite_t
 	SPRITE_ENEMY_EGG,
 	SPRITE_ENEMY_FLY,
 	SPRITE_ENEMY_BIG,
+	SPRITE_HOVER,
+	SPRITE_SELECT,
 };
 typedef enum sprite_t sprite_t;
 

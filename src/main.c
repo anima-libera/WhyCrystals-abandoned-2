@@ -272,11 +272,13 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 	{
 		SDL_SetRenderDrawColor(g_renderer, 255, 255, 255, 255);
 		SDL_RenderDrawRect(g_renderer, &rect);
+		//draw_sprite(SPRITE_SELECT, &rect);
 	}
 	else if (tile->is_hovered && !tile->is_available)
 	{
 		SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
 		SDL_RenderDrawRect(g_renderer, &rect);
+		//draw_sprite(SPRITE_HOVER, &rect);
 	}
 	if (tile->is_available)
 	{
@@ -489,7 +491,7 @@ phase_t g_phase;
 
 /* Can the player still place a tower in the current turn? */
 bool g_tower_available;
-/* The turn number, counting from zero. */
+/* The turn number, counting from one. */
 int g_turn;
 /* A time counter that allows to put a delay inbetween successive actions
  * that can happen automatically a bit too fast. */
@@ -871,7 +873,7 @@ void tower_shoot(tc_t tower_tc, tc_t target_tc)
 
 bool game_play_towers(void)
 {
-	for (tc_t src_tc = {0}; tc_in_map(src_tc); tc_iter(&src_tc))
+	for (tc_t src_tc = g_crystal_tc; tc_in_map(src_tc); tc_iter_spiral_crystal(&src_tc))
 	{
 		tile_t* tower_tile = map_tile(src_tc);
 		if (tower_tile->obj.can_still_act)
@@ -1058,6 +1060,8 @@ void game_perform(void)
 
 int main(void)
 {
+	printf("Why Crystals ? version 0.0.1 indev\n");
+
 	srand(time(NULL));
 
 	if (SDL_Init(SDL_INIT_VIDEO) != 0)

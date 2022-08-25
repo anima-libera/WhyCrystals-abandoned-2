@@ -24,6 +24,8 @@ static SDL_Rect s_sprite_rect_table[] = {
 	[SPRITE_ENEMY_EGG] = {XY16(0, 3), WH16},
 	[SPRITE_ENEMY_FLY] = {XY16(0, 2), WH16},
 	[SPRITE_ENEMY_BIG] = {XY16(1, 2), WH16},
+	[SPRITE_HOVER] =     {XY16(0, 9), WH16},
+	[SPRITE_SELECT] =    {XY16(1, 9), WH16},
 	#undef XY16
 	#undef WH16
 };
