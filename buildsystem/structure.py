@@ -1,13 +1,13 @@
 
 """ Structure of the project file tree regarding building.
 
-Pyea repository root
+WhyCrystals repository root
 ├─src
 │ ├─embedded.h (header file allowed for embedding declarations, see buildsystem/embed.py)
 │ ├─embedded.c (generated c file containing embedded content, see buildsystem/embed.py)
 │ └─... (all the source files, sub-directories)
 ├─bin
-│ ├─Pyea executable
+│ WhyCrystals executable
 │ └─... (all the stuff that the executable interacts with)
 └─build
   ├─build_mode.py (the table mapping the build modes to their ids)
@@ -25,8 +25,8 @@ Pyea repository root
 import os
 from buildsystem.utils import *
 
-# All the Pyea source files are supposed to be in there, sub-directories are allowed, as well as
-# other types of files (that are neither .c nor .h files).
+# All the WhyCrystals source files are supposed to be in there, sub-directories are allowed,
+# as well as other types of files (that are neither .c nor .h files).
 SRC_DIR = "src"
 
 EMBEDDED_HEADER_FILE_NAME = "embedded.h"
@@ -46,7 +46,7 @@ def make_sure_bin_dir_exists() -> None:
 	if not os.path.isdir(BIN_DIR):
 		os.makedirs(BIN_DIR)
 
-BIN_NAME = "Pyea"
+BIN_NAME = "WhyCrystals"
 
 def get_bin_file_path() -> Path:
 	return os.path.join(BIN_DIR, BIN_NAME)

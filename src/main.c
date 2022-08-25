@@ -1014,7 +1014,7 @@ int main(void)
 		assert(false);
 	}
 
-	g_window = SDL_CreateWindow("Pyea",
+	g_window = SDL_CreateWindow("Why Crystals ?",
 		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_SIDE, WINDOW_SIDE, 0);
 	assert(g_window != NULL);
 

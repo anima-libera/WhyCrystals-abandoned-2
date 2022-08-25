@@ -1,6 +1,6 @@
 
-#ifndef PYEA_HEADER_SPRITES_
-#define PYEA_HEADER_SPRITES_
+#ifndef WHYCRYSTALS_HEADER_SPRITES_
+#define WHYCRYSTALS_HEADER_SPRITES_
 
 #include <SDL2/SDL.h>
 
@@ -28,4 +28,4 @@ void cleanup_sprite_sheet(void);
 
 void draw_sprite(sprite_t sprite, SDL_Rect const* dst_rect);
 
-#endif /* PYEA_HEADER_SPRITES_ */
+#endif /* WHYCRYSTALS_HEADER_SPRITES_ */

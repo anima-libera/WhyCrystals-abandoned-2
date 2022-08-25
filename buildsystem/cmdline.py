@@ -8,7 +8,7 @@ See the `HELP_MESSAGE` for the available options.
 import sys
 from buildsystem.utils import *
 
-HELP_MESSAGE = """Compiles and links the Pyea source code.
+HELP_MESSAGE = """Compiles and links the WhyCrystals source code.
 
 Usage:
   {script} [options]

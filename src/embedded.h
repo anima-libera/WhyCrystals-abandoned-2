@@ -1,6 +1,6 @@
 
-#ifndef PYEA_HEADER_EMBEDDED_
-#define PYEA_HEADER_EMBEDDED_
+#ifndef WHYCRYSTALS_HEADER_EMBEDDED_
+#define WHYCRYSTALS_HEADER_EMBEDDED_
 
 /* The EMBEDDED macro is magic as it is scanned for by the buildsystem (in this header file only)
  * and triggers the generation of a variable definition in the generted "embedded.c" source file.
@@ -25,4 +25,4 @@ EMBEDDED("../assets/sprite_sheet.png", SIZE) unsigned int const g_asset_sprite_s
 EMBEDDED("../assets/Retro Gaming.ttf", BINARY) unsigned char const g_asset_font[];
 EMBEDDED("../assets/Retro Gaming.ttf", SIZE) unsigned int const g_asset_font_size;
 
-#endif /* PYEA_HEADER_EMBEDDED_ */
+#endif /* WHYCRYSTALS_HEADER_EMBEDDED_ */
