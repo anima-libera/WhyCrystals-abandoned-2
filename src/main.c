@@ -18,6 +18,8 @@ struct tc_t
 };
 typedef struct tc_t tc_t;
 
+tc_t g_crystal_tc;
+
 int g_map_side;
 
 void tc_iter(tc_t* tc)
@@ -38,6 +40,84 @@ bool tc_in_map(tc_t tc)
 bool tc_eq(tc_t tc_a, tc_t tc_b)
 {
 	return tc_a.x == tc_b.x && tc_a.y == tc_b.y;
+}
+
+/* Iterates over the tiles of the map in a spiral pattern
+ * centered on the crystal and growing outwards. */
+void tc_iter_spiral_crystal(tc_t* tc)
+{
+	/* In there, the `spiral_tc` will follow the spiral path.
+	 * That path is a succession of 'rings' in a <> shape,
+	 * from small rings to big rings.
+	 * When `spiral_tc` encounters `tc` then the next tile is
+	 * the good one (this is indicated by `sync` being true),
+	 * except if it is outside the map (in which case
+	 * we just keep going until we get back in the map).
+	 * We actually start by the ring in which `tc` already is.
+	 * If an entire ring is iterated over without ever touching the map,
+	 * then it means it is time to stop. */
+
+	int dist = abs(tc->x - g_crystal_tc.x) + abs(tc->y - g_crystal_tc.y);
+	bool sync = tc_eq(g_crystal_tc, *tc);
+	while (true)
+	{
+		tc_t spiral_tc = {.x = g_crystal_tc.x - dist, .y = g_crystal_tc.y};
+		tc_t ring_end_tc = dist == 0 ? g_crystal_tc :
+			(tc_t){.x = g_crystal_tc.x - dist + 1, .y = g_crystal_tc.y + 1};
+		bool ring_is_out = true;
+
+		struct dir_t { int dx, dy; };
+		typedef struct dir_t dir_t;
+		dir_t dirs[] = {{1, -1}, {1, 1}, {-1, 1}, {-1, -1}};
+		for (int i = 0; i < 4; i++)
+		{
+			for (int j = 0; j < dist || dist == 0; j++)
+			{
+				if (tc_in_map(spiral_tc))
+				{
+					ring_is_out = false;
+				}
+				if (tc_eq(spiral_tc, *tc))
+				{
+					sync = true;
+				}
+
+				if (tc_eq(spiral_tc, ring_end_tc))
+				{
+					/* Going to the next ring. */
+					spiral_tc = (tc_t){.x = g_crystal_tc.x - (dist+1), .y = g_crystal_tc.y};
+				}
+				else
+				{
+					spiral_tc.x += dirs[i].dx;
+					spiral_tc.y += dirs[i].dy;
+				}
+
+				if (sync && tc_in_map(spiral_tc))
+				{
+					*tc = spiral_tc;
+					return;
+				}
+				if (dist == 0)
+				{
+					/* Special case: The ring at distance zero is just one tile
+					 * and the ring ends immediately. */
+					goto end_ring;
+				}
+			}
+		}
+
+		end_ring:
+		if (ring_is_out)
+		{
+			/* If the ring never enters the map, then it means all the tiles
+			 * of the map have been iterated over, and it has to end,
+			 * thus here we go out of the grid volontarily to end the iteration. */
+			*tc = (tc_t){.x = 0, .y = g_map_side};
+			return;
+		}
+		dist++;
+	}
 }
 
 /* Screen coordinates. */
@@ -291,28 +371,28 @@ void map_generate(void)
 	}
 
 	/* Place the crystal somewhere near the middle of the map. */
-	tc_t const crystal_tc = {
+	g_crystal_tc = (tc_t){
 		g_map_side / 2 + rand() % 5 - 2,
 		g_map_side / 2 + rand() % 5 - 2};
-	map_tile(crystal_tc)->obj = (obj_t){.type = OBJ_CRYSTAL};
+	map_tile(g_crystal_tc)->obj = (obj_t){.type = OBJ_CRYSTAL};
 
 	/* Place the 3 units around the crystal. */
 	tc_t tc;
-	tc = crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) += 1;
+	tc = g_crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) += 1;
 	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_RED};
-	tc = crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) -= 1;
+	tc = g_crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) -= 1;
 	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_RED};
-	tc = crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) += rand() % 2 ? 2 : -2;
+	tc = g_crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) += rand() % 2 ? 2 : -2;
 	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_RED};
 
 	/* Also place a tower near the crystal. */
-	tc = crystal_tc; tc.x += rand() % 2 ? 1 : -1; tc.y += rand() % 2 ? 1 : -1;
+	tc = g_crystal_tc; tc.x += rand() % 2 ? 1 : -1; tc.y += rand() % 2 ? 1 : -1;
 	map_tile(tc)->obj = (obj_t){.type = OBJ_TOWER, .ammo = 2};
 
 	/* Making sure that enemies close to the crystal are eggs so that the player
 	 * has some time to take action against them. */
-	for (tc.y = crystal_tc.y - 2; tc.y < crystal_tc.y + 3; tc.y++)
-	for (tc.x = crystal_tc.x - 2; tc.x < crystal_tc.x + 3; tc.x++)
+	for (tc.y = g_crystal_tc.y - 2; tc.y < g_crystal_tc.y + 3; tc.y++)
+	for (tc.x = g_crystal_tc.x - 2; tc.x < g_crystal_tc.x + 3; tc.x++)
 	{
 		tile_t* tile = map_tile(tc);
 		if (tile->obj.type == OBJ_ENEMY_FLY)
@@ -373,19 +453,6 @@ tile_t* map_selected_tile(void)
 	{
 		tile_t* tile = map_tile(tc);
 		if (tile->is_selected)
-		{
-			return tile;
-		}
-	}
-	return NULL;
-}
-
-tile_t* map_crystal_tile(void)
-{
-	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
-	{
-		tile_t* tile = map_tile(tc);
-		if (tile->obj.type == OBJ_CRYSTAL)
 		{
 			return tile;
 		}
@@ -490,7 +557,7 @@ void handle_mouse_click(bool is_left_click)
 
 bool game_play_enemy(void)
 {
-	for (tc_t src_tc = {0}; tc_in_map(src_tc); tc_iter(&src_tc))
+	for (tc_t src_tc = g_crystal_tc; tc_in_map(src_tc); tc_iter_spiral_crystal(&src_tc))
 	{
 		tile_t* src_tile = map_tile(src_tc);
 		if (src_tile->obj.can_still_act)
@@ -525,32 +592,24 @@ bool game_play_enemy(void)
 				}
 				else
 				{
-					/* The destination can also be a step towards the crystal
-					 * (and in case there is no crystal, the center of the map will do). */
-					tc_t crystal_tc = {g_map_side / 2, g_map_side / 2};
-					tile_t* crystal_tile = map_crystal_tile();
-					if (crystal_tile != NULL)
-					{
-						crystal_tc = map_tile_tc(crystal_tile);
-					}
 					/* Does the dst tile is differect from the current fly tile along the X axis?
 					 * This is random choice, except when one option does not make sense. */
 					bool axis_x = rand() % 2 == 0;
-					if (src_tc.y == crystal_tc.y)
+					if (src_tc.y == g_crystal_tc.y)
 					{
 						axis_x = true;
 					}
-					else if (src_tc.x == crystal_tc.x)
+					else if (src_tc.x == g_crystal_tc.x)
 					{
 						axis_x = false;
 					}
 					if (axis_x)
 					{
-						dst_tc.x += src_tc.x < crystal_tc.x ? 1 : -1;
+						dst_tc.x += src_tc.x < g_crystal_tc.x ? 1 : -1;
 					}
 					else
 					{
-						dst_tc.y += src_tc.y < crystal_tc.y ? 1 : -1;
+						dst_tc.y += src_tc.y < g_crystal_tc.y ? 1 : -1;
 					}
 				}
 
@@ -671,36 +730,28 @@ bool game_play_enemy(void)
 				}
 				else
 				{
-					/* The destination can also be a step towards the crystal
-					 * (and in case there is no crystal, the center of the map will do). */
-					tc_t crystal_tc = {g_map_side / 2, g_map_side / 2};
-					tile_t* crystal_tile = map_crystal_tile();
-					if (crystal_tile != NULL)
-					{
-						crystal_tc = map_tile_tc(crystal_tile);
-					}
 					/* Does the dst tile is differect from the current fly tile along the X axis?
 					 * This is random choice, except when one option does not make sense. */
 					bool axis_x = rand() % 2 == 0;
-					if (src_tc.y == crystal_tc.y)
+					if (src_tc.y == g_crystal_tc.y)
 					{
 						axis_x = true;
 					}
-					else if (src_tc.x == crystal_tc.x)
+					else if (src_tc.x == g_crystal_tc.x)
 					{
 						axis_x = false;
 					}
 					if (axis_x)
 					{
 						dst_tc.x +=
-							(src_tc.x < crystal_tc.x ? 1 : -1) *
-							(abs(src_tc.x - crystal_tc.x) == 1 || rand() % 2 ? 1 : 2);
+							(src_tc.x < g_crystal_tc.x ? 1 : -1) *
+							(abs(src_tc.x - g_crystal_tc.x) == 1 || rand() % 2 ? 1 : 2);
 					}
 					else
 					{
 						dst_tc.y +=
-							(src_tc.y < crystal_tc.y ? 1 : -1) *
-							(abs(src_tc.y - crystal_tc.y) == 1 || rand() % 2 ? 1 : 2);
+							(src_tc.y < g_crystal_tc.y ? 1 : -1) *
+							(abs(src_tc.y - g_crystal_tc.y) == 1 || rand() % 2 ? 1 : 2);
 					}
 				}
 
