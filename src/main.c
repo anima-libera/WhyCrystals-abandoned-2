@@ -11,20 +11,72 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 
-#define CELL_SIDE_PIXELS 64
-#define WINDOW_SIDE (800 - 800 % CELL_SIDE_PIXELS)
-
-void draw_text(char const* text, int r, int g, int b, int x, int y, bool center_x)
+/* Tile coordinates. */
+struct tc_t
 {
-	SDL_Color color = {.r = r, .g = g, .b = b, .a = 255};
-	SDL_Surface* surface = TTF_RenderText_Solid(g_font, text, color);
+	int x, y;
+};
+typedef struct tc_t tc_t;
+
+int g_map_side;
+
+void tc_iter(tc_t* tc)
+{
+	tc->x++;
+	if (tc->x >= g_map_side)
+	{
+		tc->x = 0;
+		tc->y++;
+	}
+}
+
+bool tc_in_map(tc_t tc)
+{
+	return 0 <= tc.x && tc.x < g_map_side && 0 <= tc.y && tc.y < g_map_side;
+}
+
+bool tc_eq(tc_t tc_a, tc_t tc_b)
+{
+	return tc_a.x == tc_b.x && tc_a.y == tc_b.y;
+}
+
+/* Screen coordinates. */
+struct sc_t
+{
+	int x, y;
+};
+typedef struct sc_t sc_t;
+
+#define TILE_SIDE_PIXELS 64
+#define WINDOW_SIDE (800 - 800 % TILE_SIDE_PIXELS)
+
+sc_t tc_to_sc(tc_t tc)
+{
+	return (sc_t){tc.x * TILE_SIDE_PIXELS, tc.y * TILE_SIDE_PIXELS};
+}
+
+tc_t sc_to_tc(sc_t sc)
+{
+	return (tc_t){sc.x / TILE_SIDE_PIXELS, sc.y / TILE_SIDE_PIXELS};
+}
+
+struct rgb_t
+{
+	unsigned char r, g, b;
+};
+typedef struct rgb_t rgb_t;
+
+void draw_text(char const* text, rgb_t color, sc_t sc, bool center_x)
+{
+	SDL_Color sdl_color = {.r = color.r, .g = color.g, .b = color.b, .a = 255};
+	SDL_Surface* surface = TTF_RenderText_Solid(g_font, text, sdl_color);
 	assert(surface != NULL);
 	SDL_Texture* texture = SDL_CreateTextureFromSurface(g_renderer, surface);
 	assert(texture != NULL);
 	SDL_FreeSurface(surface);
-	SDL_Rect rect = {.y = y};
+	SDL_Rect rect = {.y = sc.y};
 	SDL_QueryTexture(texture, NULL, NULL, &rect.w, &rect.h);
-	rect.x = center_x ? x-rect.w/2 : x;
+	rect.x = center_x ? sc.x - rect.w/2 : sc.x;
 	SDL_RenderCopy(g_renderer, texture, NULL, &rect);
 	SDL_DestroyTexture(texture);
 }
@@ -53,7 +105,7 @@ struct obj_t
 };
 typedef struct obj_t obj_t;
 
-void draw_obj(obj_t const* obj, int x, int y, int side)
+void draw_obj(obj_t const* obj, sc_t sc, int side)
 {
 	/* Draw the object sprite. */
 	sprite_t sprite;
@@ -72,7 +124,7 @@ void draw_obj(obj_t const* obj, int x, int y, int side)
 		case OBJ_ENEMY_BIG: sprite = SPRITE_ENEMY_BIG; break;
 		default: assert(false);
 	}
-	SDL_Rect rect = {.x = x, .y = y, .w = side, .h = side};
+	SDL_Rect rect = {.x = sc.x, .y = sc.y, .w = side, .h = side};
 	draw_sprite(sprite, &rect);
 
 	/* Draw the can-still-act indicator. */
@@ -104,7 +156,7 @@ struct tile_t
 };
 typedef struct tile_t tile_t;
 
-void draw_tile(tile_t const* tile, int x, int y, int side)
+void draw_tile(tile_t const* tile, sc_t sc, int side)
 {
 	/* Draw the floor tile sprite. */
 	sprite_t sprite;
@@ -114,7 +166,7 @@ void draw_tile(tile_t const* tile, int x, int y, int side)
 		case FLOOR_DESERT:    sprite = SPRITE_DESERT;    break;
 		default: assert(false);
 	}
-	SDL_Rect rect = {.x = x, .y = y, .w = side, .h = side};
+	SDL_Rect rect = {.x = sc.x, .y = sc.y, .w = side, .h = side};
 	draw_sprite(sprite, &rect);
 
 	/* Apply a color filter on the tile sprite to make them be
@@ -158,14 +210,14 @@ void draw_tile(tile_t const* tile, int x, int y, int side)
 	}
 
 	/* Draw the object that is on the tile. */
-	draw_obj(&tile->obj, x, y, side);
+	draw_obj(&tile->obj, sc, side);
 
 	/* Draw the tower ammo count. */
 	if ((tile->is_selected || tile->is_hovered) && tile->obj.type == OBJ_TOWER)
 	{
 		char string[20];
 		sprintf(string, "%d", tile->obj.ammo);
-		draw_text(string, 0, 0, 0, rect.x + 3, rect.y - 1, false);
+		draw_text(string, (rgb_t){0, 0, 0}, (sc_t){rect.x + 3, rect.y - 1}, false);
 	}
 }
 
@@ -173,92 +225,96 @@ struct motion_t
 {
 	int t;
 	int t_max;
-	int src_x, src_y;
-	int dst_x, dst_y;
+	tc_t src, dst;
 	obj_t obj;
 };
 typedef struct motion_t motion_t;
 
-int g_map_side;
 tile_t* g_map_grid;
 motion_t g_motion;
 
-tile_t* map_tile(int x, int y)
+tile_t* map_tile(tc_t tc)
 {
-	if (x < 0 || x >= g_map_side || y < 0 || y >= g_map_side)
+	if (tc_in_map(tc))
+	{
+		return &g_map_grid[tc.y * g_map_side + tc.x];
+	}
+	else
 	{
 		return NULL;
 	}
-	return &g_map_grid[y * g_map_side + x];
 }
 
 void draw_map(void)
 {
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 	{
-		draw_tile(map_tile(x, y),
-			x * CELL_SIDE_PIXELS, y * CELL_SIDE_PIXELS, CELL_SIDE_PIXELS);
+		draw_tile(map_tile(tc), tc_to_sc(tc), TILE_SIDE_PIXELS);
 	}
 
 	if (g_motion.t_max > 0)
 	{
 		motion_t* m = &g_motion;
 		float r = (float)m->t / (float)m->t_max;
-		float x = (float)m->src_x * (1.0f - r) + (float)m->dst_x * r;
-		float y = (float)m->src_y * (1.0f - r) + (float)m->dst_y * r;
+		float x = (float)m->src.x * (1.0f - r) + (float)m->dst.x * r;
+		float y = (float)m->src.y * (1.0f - r) + (float)m->dst.y * r;
 		draw_obj(&m->obj,
-			x * (float)CELL_SIDE_PIXELS, y * (float)CELL_SIDE_PIXELS,
-			CELL_SIDE_PIXELS);
+			(sc_t){x * (float)TILE_SIDE_PIXELS, y * (float)TILE_SIDE_PIXELS},
+			TILE_SIDE_PIXELS);
 	}
 }
 
 void map_generate(void)
 {
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 	{
-		map_tile(x, y)->obj = (obj_t){0};
+		tile_t* tile = map_tile(tc);
 
 		if (rand() % 7 == 1)
 		{
-			map_tile(x, y)->floor = FLOOR_DESERT;
+			tile->floor = FLOOR_DESERT;
 		}
 
+		tile->obj = (obj_t){0};
 		if (rand() % 21 == 1)
 		{
-			map_tile(x, y)->obj.type = OBJ_ENEMY_FLY;
+			tile->obj.type = OBJ_ENEMY_FLY;
 		}
 		else if (rand() % 13 == 3)
 		{
-			map_tile(x, y)->obj.type = OBJ_ROCK;
+			tile->obj.type = OBJ_ROCK;
 		}
 		else if (rand() % 13 == 3)
 		{
-			map_tile(x, y)->obj.type = OBJ_TREE;
+			tile->obj.type = OBJ_TREE;
 		}
 	}
 
-	int cx = g_map_side / 2 + rand() % 5 - 2;
-	int cy = g_map_side / 2 + rand() % 5 - 2;
-	map_tile(cx, cy)->obj.type = OBJ_CRYSTAL;
+	/* Place the crystal somewhere near the middle of the map. */
+	tc_t const crystal_tc = {
+		g_map_side / 2 + rand() % 5 - 2,
+		g_map_side / 2 + rand() % 5 - 2};
+	map_tile(crystal_tc)->obj = (obj_t){.type = OBJ_CRYSTAL};
 
-	int ux, uy;
-	ux = cx; uy = cy; *(rand() % 2 ? &ux : &uy) += 1;
-	map_tile(ux, uy)->obj.type = OBJ_UNIT_RED;
-	ux = cx; uy = cy; *(rand() % 2 ? &ux : &uy) -= 1;
-	map_tile(ux, uy)->obj.type = OBJ_UNIT_RED;
-	ux = cx; uy = cy; *(rand() % 2 ? &ux : &uy) += rand() % 2 ? 2 : -2;
-	map_tile(ux, uy)->obj.type = OBJ_UNIT_RED;
+	/* Place the 3 units around the crystal. */
+	tc_t tc;
+	tc = crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) += 1;
+	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_RED};
+	tc = crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) -= 1;
+	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_RED};
+	tc = crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) += rand() % 2 ? 2 : -2;
+	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_RED};
 
-	ux = cx; uy = cy; ux += rand() % 2 ? 1 : -1; uy += rand() % 2 ? 1 : -1;
-	map_tile(ux, uy)->obj.type = OBJ_TOWER;
-	map_tile(ux, uy)->obj.ammo = 2;
+	/* Also place a tower near the crystal. */
+	tc = crystal_tc; tc.x += rand() % 2 ? 1 : -1; tc.y += rand() % 2 ? 1 : -1;
+	map_tile(tc)->obj = (obj_t){.type = OBJ_TOWER, .ammo = 2};
 
-	for (int y = cy - 2; y < cy + 3; y++)
-	for (int x = cx - 2; x < cx + 3; x++)
+	/* Making sure that enemies close to the crystal are eggs so that the player
+	 * has some time to take action against them. */
+	for (tc.y = crystal_tc.y - 2; tc.y < crystal_tc.y + 3; tc.y++)
+	for (tc.x = crystal_tc.x - 2; tc.x < crystal_tc.x + 3; tc.x++)
 	{
-		tile_t* tile = map_tile(x, y);
+		tile_t* tile = map_tile(tc);
 		if (tile->obj.type == OBJ_ENEMY_FLY)
 		{
 			tile->obj.type = OBJ_ENEMY_EGG;
@@ -268,52 +324,41 @@ void map_generate(void)
 
 void map_clear_available(void)
 {
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 	{
-		map_tile(x, y)->is_available = false;
+		map_tile(tc)->is_available = false;
 	}
 }
 
 void map_clear_hovered(void)
 {
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 	{
-		map_tile(x, y)->is_hovered = false;
+		map_tile(tc)->is_hovered = false;
 	}
 }
 
 void map_clear_selected(void)
 {
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 	{
-		map_tile(x, y)->is_selected = false;
+		map_tile(tc)->is_selected = false;
 	}
 }
 
 void map_clear_can_still_act(void)
 {
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 	{
-		map_tile(x, y)->obj.can_still_act = false;
+		map_tile(tc)->obj.can_still_act = false;
 	}
-}
-
-tile_t* map_tile_from_pixel(int pixel_x, int pixel_y)
-{
-	return map_tile(
-		pixel_x / CELL_SIDE_PIXELS, pixel_y / CELL_SIDE_PIXELS);
 }
 
 tile_t* map_hovered_tile(void)
 {
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 	{
-		tile_t* tile = map_tile(x, y);
+		tile_t* tile = map_tile(tc);
 		if (tile->is_hovered)
 		{
 			return tile;
@@ -324,10 +369,9 @@ tile_t* map_hovered_tile(void)
 
 tile_t* map_selected_tile(void)
 {
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 	{
-		tile_t* tile = map_tile(x, y);
+		tile_t* tile = map_tile(tc);
 		if (tile->is_selected)
 		{
 			return tile;
@@ -338,10 +382,9 @@ tile_t* map_selected_tile(void)
 
 tile_t* map_crystal_tile(void)
 {
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 	{
-		tile_t* tile = map_tile(x, y);
+		tile_t* tile = map_tile(tc);
 		if (tile->obj.type == OBJ_CRYSTAL)
 		{
 			return tile;
@@ -350,26 +393,23 @@ tile_t* map_crystal_tile(void)
 	return NULL;
 }
 
-void map_tile_coords(tile_t* tile, int* out_x, int* out_y)
+tc_t map_tile_tc(tile_t* tile)
 {
-	int tile_offset = tile - g_map_grid;
-	if (out_x != NULL)
-	{
-		*out_x = tile_offset % g_map_side;
-	}
-	if (out_y != NULL)
-	{
-		*out_y = tile_offset / g_map_side;
-	}
+	int offset = tile - g_map_grid;
+	return (tc_t){
+		.x = offset % g_map_side,
+		.y = offset / g_map_side};
 }
 
-void handle_mouse_motion(int new_x, int new_y)
+void handle_mouse_motion(sc_t sc)
 {
+	/* Update the hovered tile. */
 	map_clear_hovered();
-	tile_t* tile = map_tile_from_pixel(new_x, new_y);
-	tile->is_hovered = true;
+	map_tile(sc_to_tc(sc))->is_hovered = true;
 }
 
+/* A whole game turn is a succession of phases during which
+ * a specific subset of the gameplay actually happens. */
 enum phase_t
 {
 	PHASE_PLAYER,
@@ -380,36 +420,49 @@ typedef enum phase_t phase_t;
 
 phase_t g_phase;
 
+/* Can the player still place a tower in the current turn? */
 bool g_tower_available;
+/* The turn number, counting from zero. */
 int g_turn;
+/* A time counter that allows to put a delay inbetween successive actions
+ * that can happen automatically a bit too fast. */
 int g_phase_time;
+/* Has the player lost the game? */
 bool g_game_over;
 
 void handle_mouse_click(bool is_left_click)
 {
 	tile_t* old_selected = map_selected_tile();
+
+	/* Update the selected tile. */
 	map_clear_selected();
 	tile_t* new_selected = map_hovered_tile();
 	new_selected->is_selected = true;
+
+	/* If an animation is playing, then we forbid interaction. */
 	if (g_motion.t_max > 0)
 	{
 		return;
 	}
+
 	if (new_selected->is_available)
 	{
+		/* A unit is moving or placing a tower. */
 		assert(old_selected->obj.type == OBJ_UNIT_RED);
 		g_motion.t = 0;
 		g_motion.t_max = 7;
-		map_tile_coords(old_selected, &g_motion.src_x, &g_motion.src_y);
-		map_tile_coords(new_selected, &g_motion.dst_x, &g_motion.dst_y);
+		g_motion.src = map_tile_tc(old_selected);
+		g_motion.dst = map_tile_tc(new_selected);
 		if (is_left_click)
 		{
+			/* Moving. */
 			g_motion.obj = old_selected->obj;
 			g_motion.obj.can_still_act = false;
 			old_selected->obj = (obj_t){0};
 		}
 		else if (g_tower_available)
 		{
+			/* Placing a tower. */
 			g_motion.obj = (obj_t){.type = OBJ_TOWER, .ammo = 4};
 			g_tower_available = false;
 			old_selected->obj.can_still_act = false;
@@ -421,32 +474,30 @@ void handle_mouse_click(bool is_left_click)
 	if (new_selected->obj.type == OBJ_UNIT_RED &&
 		new_selected->obj.can_still_act)
 	{
-		int selected_x, selected_y;
-		map_tile_coords(new_selected, &selected_x, &selected_y);
-		for (int y = 0; y < g_map_side; y++)
-		for (int x = 0; x < g_map_side; x++)
+		/* A unit that can still act is selected, accessible tiles
+		 * have to be flagged as available for action. */
+		tc_t const selected_tc = map_tile_tc(new_selected);
+		for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 		{
-			int const dist = abs(x - selected_x) + abs(y - selected_y);
-			bool is_accessible = dist != 0 && dist <= 2;
-			if (map_tile(x, y)->obj.type != OBJ_NONE)
-			{
-				is_accessible = false;
-			}
-			map_tile(x, y)->is_available = is_accessible;
+			int const dist = abs(tc.x - selected_tc.x) + abs(tc.y - selected_tc.y);
+			bool is_accessible =
+				dist != 0 && dist <= 2 &&
+				map_tile(tc)->obj.type == OBJ_NONE;
+			map_tile(tc)->is_available = is_accessible;
 		}
 	}
 }
 
 bool game_play_enemy(void)
 {
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t src_tc = {0}; tc_in_map(src_tc); tc_iter(&src_tc))
 	{
-		tile_t* src_tile = map_tile(x, y);
+		tile_t* src_tile = map_tile(src_tc);
 		if (src_tile->obj.can_still_act)
 		{
 			if (src_tile->obj.type == OBJ_ENEMY_EGG)
 			{
+				/* All an egg can do is hatch by chance. */
 				src_tile->obj.can_still_act = false;
 				if (rand() % 4 == 0)
 				{
@@ -456,63 +507,68 @@ bool game_play_enemy(void)
 			}
 			else if (src_tile->obj.type == OBJ_ENEMY_FLY)
 			{
-				int dst_x = x, dst_y = y;
+				/* A fly can move or lay an egg to an adjacent tile,
+				 * which is to be decided. */
+				tc_t dst_tc = src_tc;
 
-				if ((rand() >> 5) % 5 == 4)
+				if ((rand() >> 5) % 6 == 0)
 				{
+					/* The destination can be random. */
 					if ((rand() >> 5) % 2)
 					{
-						dst_x += rand() % 2 ? 1 : -1;
+						dst_tc.x += rand() % 2 ? 1 : -1;
 					}
 					else
 					{
-						dst_y += rand() % 2 ? 1 : -1;
+						dst_tc.y += rand() % 2 ? 1 : -1;
 					}
 				}
 				else
 				{
-					int crystal_x = g_map_side / 2;
-					int crystal_y = g_map_side / 2;
+					/* The destination can also be a step towards the crystal
+					 * (and in case there is no crystal, the center of the map will do). */
+					tc_t crystal_tc = {g_map_side / 2, g_map_side / 2};
 					tile_t* crystal_tile = map_crystal_tile();
 					if (crystal_tile != NULL)
 					{
-						map_tile_coords(crystal_tile, &crystal_x, &crystal_y);
+						crystal_tc = map_tile_tc(crystal_tile);
 					}
-					bool move_x = rand() % 2 == 0 && x != crystal_x;
-					if (move_x)
+					/* Does the dst tile is differect from the current fly tile along the X axis?
+					 * This is random choice, except when one option does not make sense. */
+					bool axis_x = rand() % 2 == 0;
+					if (src_tc.y == crystal_tc.y)
 					{
-						dst_x += x < crystal_x ? 1 : -1;
+						axis_x = true;
+					}
+					else if (src_tc.x == crystal_tc.x)
+					{
+						axis_x = false;
+					}
+					if (axis_x)
+					{
+						dst_tc.x += src_tc.x < crystal_tc.x ? 1 : -1;
 					}
 					else
 					{
-						dst_y += y < crystal_y ? 1 : -1;
+						dst_tc.y += src_tc.y < crystal_tc.y ? 1 : -1;
 					}
 				}
 
-				if (dst_x < 0)
+				if (!tc_in_map(dst_tc) || tc_eq(src_tc, dst_tc))
 				{
-					dst_x = 0;
+					src_tile->obj.can_still_act = false;
+					return false;
 				}
-				else if (dst_x >= g_map_side)
-				{
-					dst_x = g_map_side - 1;
-				}
-				if (dst_y < 0)
-				{
-					dst_y = 0;
-				}
-				else if (dst_y >= g_map_side)
-				{
-					dst_y = g_map_side - 1;
-				}
+				tile_t* dst_tile = map_tile(dst_tc);
 
-				tile_t* dst_tile = map_tile(dst_x, dst_y);
-				if (dst_tile->obj.type != OBJ_CRYSTAL &&
-					dst_tile->obj.type != OBJ_UNIT_RED &&
-					dst_tile->obj.type != OBJ_TOWER &&
-					dst_tile->obj.type != OBJ_TOWER_OFF &&
-					dst_tile->obj.type != OBJ_TREE &&
-					(dst_tile == src_tile || dst_tile->obj.type != OBJ_NONE))
+				bool can_walk_on =
+					dst_tile->obj.type == OBJ_NONE ||
+					dst_tile->obj.type == OBJ_CRYSTAL ||
+					dst_tile->obj.type == OBJ_UNIT_RED ||
+					dst_tile->obj.type == OBJ_TOWER ||
+					dst_tile->obj.type == OBJ_TOWER_OFF ||
+					dst_tile->obj.type == OBJ_TREE;
+				if (!can_walk_on)
 				{
 					src_tile->obj.can_still_act = false;
 					return false;
@@ -522,8 +578,8 @@ bool game_play_enemy(void)
 
 				g_motion.t = 0;
 				g_motion.t_max = 6;
-				map_tile_coords(src_tile, &g_motion.src_x, &g_motion.src_y);
-				map_tile_coords(dst_tile, &g_motion.dst_x, &g_motion.dst_y);
+				g_motion.src = src_tc;
+				g_motion.dst = dst_tc;
 				src_tile->obj.can_still_act = false;
 				if (lay_egg)
 				{
@@ -538,14 +594,16 @@ bool game_play_enemy(void)
 			}
 			else if (src_tile->obj.type == OBJ_ENEMY_BIG)
 			{
+				/* A big enemy will first shoot eggs at the towers it can see
+				 * before moving or laying an egg nearby. */
+
 				struct dir_t
 				{
 					int dx, dy;
-					int x, y;
+					tc_t tc;
 					bool is_valid;
 				};
 				typedef struct dir_t dir_t;
-
 				dir_t dirs[4] = {
 					{.dx = 1, .dy = 0},
 					{.dx = -1, .dy = 0},
@@ -553,11 +611,8 @@ bool game_play_enemy(void)
 					{.dx = 0, .dy = -1}};
 				for (int i = 0; i < 4; i ++)
 				{
-					dirs[i].x = x;
-					dirs[i].y = y;
-					dirs[i].is_valid =
-						dirs[i].x >= 0 && dirs[i].x < g_map_side &&
-						dirs[i].y >= 0 && dirs[i].y < g_map_side;
+					dirs[i].tc = src_tc;
+					dirs[i].is_valid = tc_in_map(dirs[i].tc);
 				}
 
 				bool done = false;
@@ -572,23 +627,22 @@ bool game_play_enemy(void)
 						}
 						done = false;
 
-						dirs[i].x += dirs[i].dx;
-						dirs[i].y += dirs[i].dy;
-						if (!(dirs[i].x >= 0 && dirs[i].x < g_map_side &&
-							dirs[i].y >= 0 && dirs[i].y < g_map_side))
+						dirs[i].tc.x += dirs[i].dx;
+						dirs[i].tc.y += dirs[i].dy;
+						if (!tc_in_map(dirs[i].tc))
 						{
 							dirs[i].is_valid = false;
 							continue;
 						}
-						obj_type_t type = map_tile(dirs[i].x, dirs[i].y)->obj.type;
+						obj_type_t type = map_tile(dirs[i].tc)->obj.type;
 						if (type == OBJ_TOWER || type == OBJ_TOWER_OFF)
 						{
+							/* Shoot an egg that will destroy a tower
+							 * (and the big enemy can still act). */
 							g_motion.t = 0;
 							g_motion.t_max = 14;
-							g_motion.src_x = x;
-							g_motion.src_y = y;
-							g_motion.dst_x = dirs[i].x;
-							g_motion.dst_y = dirs[i].y;
+							g_motion.src = src_tc;
+							g_motion.dst = dirs[i].tc;
 							g_motion.obj = (obj_t){.type = OBJ_ENEMY_EGG};
 							return false;
 						}
@@ -599,63 +653,72 @@ bool game_play_enemy(void)
 					}
 				}
 
-				int dst_x = x, dst_y = y;
+				/* Now it will move or lay an egg.
+				 * Note that it can do that on a distance of two tiles. */
+				tc_t dst_tc = src_tc;
 
-				if ((rand() >> 5) % 5 == 4)
+				if ((rand() >> 5) % 6 == 0)
 				{
+					/* The destination can be random. */
 					if ((rand() >> 5) % 2)
 					{
-						dst_x += (rand() % 2 ? 1 : -1) * (rand() % 2 ? 1 : 2);
+						dst_tc.x += (rand() % 2 ? 1 : -1) * (rand() % 2 ? 1 : 2);
 					}
 					else
 					{
-						dst_y += (rand() % 2 ? 1 : -1) * (rand() % 2 ? 1 : 2);
+						dst_tc.y += (rand() % 2 ? 1 : -1) * (rand() % 2 ? 1 : 2);
 					}
 				}
 				else
 				{
-					int crystal_x = g_map_side / 2;
-					int crystal_y = g_map_side / 2;
+					/* The destination can also be a step towards the crystal
+					 * (and in case there is no crystal, the center of the map will do). */
+					tc_t crystal_tc = {g_map_side / 2, g_map_side / 2};
 					tile_t* crystal_tile = map_crystal_tile();
 					if (crystal_tile != NULL)
 					{
-						map_tile_coords(crystal_tile, &crystal_x, &crystal_y);
+						crystal_tc = map_tile_tc(crystal_tile);
 					}
-					bool move_x = rand() % 2 == 0 && x != crystal_x;
-					if (move_x)
+					/* Does the dst tile is differect from the current fly tile along the X axis?
+					 * This is random choice, except when one option does not make sense. */
+					bool axis_x = rand() % 2 == 0;
+					if (src_tc.y == crystal_tc.y)
 					{
-						dst_x += x < crystal_x ? 1 : -1;
+						axis_x = true;
+					}
+					else if (src_tc.x == crystal_tc.x)
+					{
+						axis_x = false;
+					}
+					if (axis_x)
+					{
+						dst_tc.x +=
+							(src_tc.x < crystal_tc.x ? 1 : -1) *
+							(abs(src_tc.x - crystal_tc.x) == 1 || rand() % 2 ? 1 : 2);
 					}
 					else
 					{
-						dst_y += y < crystal_y ? 1 : -1;
+						dst_tc.y +=
+							(src_tc.y < crystal_tc.y ? 1 : -1) *
+							(abs(src_tc.y - crystal_tc.y) == 1 || rand() % 2 ? 1 : 2);
 					}
 				}
 
-				if (dst_x < 0)
+				if (!tc_in_map(dst_tc) || tc_eq(src_tc, dst_tc))
 				{
-					dst_x = 0;
+					src_tile->obj.can_still_act = false;
+					return false;
 				}
-				else if (dst_x >= g_map_side)
-				{
-					dst_x = g_map_side - 1;
-				}
-				if (dst_y < 0)
-				{
-					dst_y = 0;
-				}
-				else if (dst_y >= g_map_side)
-				{
-					dst_y = g_map_side - 1;
-				}
+				tile_t* dst_tile = map_tile(dst_tc);
 
-				tile_t* dst_tile = map_tile(dst_x, dst_y);
-				if (dst_tile->obj.type != OBJ_CRYSTAL &&
-					dst_tile->obj.type != OBJ_UNIT_RED &&
-					dst_tile->obj.type != OBJ_TOWER &&
-					dst_tile->obj.type != OBJ_TOWER_OFF &&
-					dst_tile->obj.type != OBJ_TREE &&
-					(dst_tile == src_tile || dst_tile->obj.type != OBJ_NONE))
+				bool can_walk_on =
+					dst_tile->obj.type == OBJ_NONE ||
+					dst_tile->obj.type == OBJ_CRYSTAL ||
+					dst_tile->obj.type == OBJ_UNIT_RED ||
+					dst_tile->obj.type == OBJ_TOWER ||
+					dst_tile->obj.type == OBJ_TOWER_OFF ||
+					dst_tile->obj.type == OBJ_TREE;
+				if (!can_walk_on)
 				{
 					src_tile->obj.can_still_act = false;
 					return false;
@@ -665,8 +728,8 @@ bool game_play_enemy(void)
 
 				g_motion.t = 0;
 				g_motion.t_max = 6;
-				map_tile_coords(src_tile, &g_motion.src_x, &g_motion.src_y);
-				map_tile_coords(dst_tile, &g_motion.dst_x, &g_motion.dst_y);
+				g_motion.src = src_tc;
+				g_motion.dst = dst_tc;
 				src_tile->obj.can_still_act = false;
 				if (lay_egg)
 				{
@@ -677,7 +740,6 @@ bool game_play_enemy(void)
 					g_motion.obj = src_tile->obj;
 					src_tile->obj = (obj_t){0};
 				}
-
 				return false;
 			}
 			else
@@ -687,57 +749,49 @@ bool game_play_enemy(void)
 		}
 	}
 
+	/* Spawn enemy flies in the top corners. */
 	if ((rand() >> 3) % 2 == 0 &&
-		map_tile(0, 0)->obj.type != OBJ_ENEMY_FLY)
+		map_tile((tc_t){0, 0})->obj.type != OBJ_ENEMY_FLY)
 	{
 		g_motion.t = 0;
 		g_motion.t_max = 6;
-		g_motion.src_x = -1;
-		g_motion.src_y = -1;
-		g_motion.dst_x = 0;
-		g_motion.dst_y = 0;
+		g_motion.src = (tc_t){-1, -1};
+		g_motion.dst = (tc_t){0, 0};
+		g_motion.obj = (obj_t){.type = OBJ_ENEMY_FLY};
+		g_motion.obj.can_still_act = false;
+		return false;
+	}
+	if ((rand() >> 3) % 2 == 0 &&
+		map_tile((tc_t){g_map_side-1, 0})->obj.type != OBJ_ENEMY_FLY)
+	{
+		g_motion.t = 0;
+		g_motion.t_max = 6;
+		g_motion.src = (tc_t){g_map_side, -1};
+		g_motion.dst = (tc_t){g_map_side-1, 0};
 		g_motion.obj = (obj_t){.type = OBJ_ENEMY_FLY};
 		g_motion.obj.can_still_act = false;
 		return false;
 	}
 
-	if ((rand() >> 3) % 2 == 0 &&
-		map_tile(g_map_side-1, 0)->obj.type != OBJ_ENEMY_FLY)
-	{
-		g_motion.t = 0;
-		g_motion.t_max = 6;
-		g_motion.src_x = g_map_side;
-		g_motion.src_y = -1;
-		g_motion.dst_x = g_map_side-1;
-		g_motion.dst_y = 0;
-		g_motion.obj = (obj_t){.type = OBJ_ENEMY_FLY};
-		g_motion.obj.can_still_act = false;
-		return false;
-	}
-
+	/* Spawn big enemies in the bottom corners. */
 	if (g_turn > 10 && g_turn % 7 == 0 &&
-		map_tile(0, g_map_side-1)->obj.type != OBJ_ENEMY_BIG)
+		map_tile((tc_t){0, g_map_side-1})->obj.type != OBJ_ENEMY_BIG)
 	{
 		g_motion.t = 0;
 		g_motion.t_max = 6;
-		g_motion.src_x = -1;
-		g_motion.src_y = g_map_side;
-		g_motion.dst_x = 0;
-		g_motion.dst_y = g_map_side-1;
+		g_motion.src = (tc_t){-1, g_map_side};
+		g_motion.dst = (tc_t){0, g_map_side-1};
 		g_motion.obj = (obj_t){.type = OBJ_ENEMY_BIG};
 		g_motion.obj.can_still_act = false;
 		return false;
 	}
-
 	if (g_turn > 10 && g_turn % 7 == 1 &&
-		map_tile(g_map_side-1, g_map_side-1)->obj.type != OBJ_ENEMY_BIG)
+		map_tile((tc_t){g_map_side-1, g_map_side-1})->obj.type != OBJ_ENEMY_BIG)
 	{
 		g_motion.t = 0;
 		g_motion.t_max = 6;
-		g_motion.src_x = g_map_side;
-		g_motion.src_y = g_map_side;
-		g_motion.dst_x = g_map_side-1;
-		g_motion.dst_y = g_map_side-1;
+		g_motion.src = (tc_t){g_map_side, g_map_side};
+		g_motion.dst = (tc_t){g_map_side-1, g_map_side-1};
 		g_motion.obj = (obj_t){.type = OBJ_ENEMY_BIG};
 		g_motion.obj.can_still_act = false;
 		return false;
@@ -746,30 +800,29 @@ bool game_play_enemy(void)
 	return true;
 }
 
-void tower_shoot(int tower_x, int tower_y, int target_x, int target_y)
+void tower_shoot(tc_t tower_tc, tc_t target_tc)
 {
 	g_motion.t = 0;
 	g_motion.t_max = 12;
-	g_motion.src_x = tower_x;
-	g_motion.src_y = tower_y;
-	g_motion.dst_x = target_x;
-	g_motion.dst_y = target_y;
+	g_motion.src = tower_tc;
+	g_motion.dst = target_tc;
 	g_motion.obj = (obj_t){.type = OBJ_SHOT};
-	tile_t* tile = map_tile(tower_x, tower_y);
-	tile->obj.can_still_act = false;
-	tile->obj.ammo--;
-	if (tile->obj.ammo <= 0)
+
+	/* Update the tower. */
+	tile_t* tower_tile = map_tile(tower_tc);
+	tower_tile->obj.can_still_act = false;
+	tower_tile->obj.ammo--;
+	if (tower_tile->obj.ammo <= 0)
 	{
-		tile->obj.type = OBJ_TOWER_OFF;
+		tower_tile->obj.type = OBJ_TOWER_OFF;
 	}
 }
 
 bool game_play_towers(void)
 {
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t src_tc = {0}; tc_in_map(src_tc); tc_iter(&src_tc))
 	{
-		tile_t* tower_tile = map_tile(x, y);
+		tile_t* tower_tile = map_tile(src_tc);
 		if (tower_tile->obj.can_still_act)
 		{
 			assert(tower_tile->obj.type == OBJ_TOWER);
@@ -777,11 +830,10 @@ bool game_play_towers(void)
 			struct dir_t
 			{
 				int dx, dy;
-				int x, y;
+				tc_t tc;
 				bool is_valid;
 			};
 			typedef struct dir_t dir_t;
-
 			dir_t dirs[4] = {
 				{.dx = 1, .dy = 0},
 				{.dx = -1, .dy = 0},
@@ -789,12 +841,12 @@ bool game_play_towers(void)
 				{.dx = 0, .dy = -1}};
 			for (int i = 0; i < 4; i ++)
 			{
-				dirs[i].x = x + dirs[i].dx;
-				dirs[i].y = y + dirs[i].dy;
+				/* Note that a tower cannot shoot at a distance of one tile. */
+				dirs[i].tc.x = src_tc.x + dirs[i].dx;
+				dirs[i].tc.y = src_tc.y + dirs[i].dy;
 				dirs[i].is_valid =
-					dirs[i].x >= 0 && dirs[i].x < g_map_side &&
-					dirs[i].y >= 0 && dirs[i].y < g_map_side &&
-					map_tile(dirs[i].x, dirs[i].y)->obj.type == OBJ_NONE;
+					tc_in_map(dirs[i].tc) &&
+					map_tile(dirs[i].tc)->obj.type == OBJ_NONE;
 			}
 
 			bool done = false;
@@ -809,20 +861,19 @@ bool game_play_towers(void)
 					}
 					done = false;
 
-					dirs[i].x += dirs[i].dx;
-					dirs[i].y += dirs[i].dy;
-					if (!(dirs[i].x >= 0 && dirs[i].x < g_map_side &&
-						dirs[i].y >= 0 && dirs[i].y < g_map_side))
+					dirs[i].tc.x += dirs[i].dx;
+					dirs[i].tc.y += dirs[i].dy;
+					if (!tc_in_map(dirs[i].tc))
 					{
 						dirs[i].is_valid = false;
 						continue;
 					}
-					obj_type_t type = map_tile(dirs[i].x, dirs[i].y)->obj.type;
+					obj_type_t type = map_tile(dirs[i].tc)->obj.type;
 					if (type == OBJ_ENEMY_FLY ||
 						type == OBJ_ENEMY_BIG ||
 						type == OBJ_ENEMY_EGG)
 					{
-						tower_shoot(x, y, dirs[i].x, dirs[i].y);
+						tower_shoot(src_tc, dirs[i].tc);
 						return false;
 					}
 					if (type != OBJ_NONE)
@@ -848,10 +899,9 @@ void start_enemy_phase(void)
 	map_clear_selected();
 	map_clear_can_still_act();
 
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 	{
-		tile_t* tile = map_tile(x, y);
+		tile_t* tile = map_tile(tc);
 		if (tile->obj.type == OBJ_ENEMY_FLY ||
 			tile->obj.type == OBJ_ENEMY_BIG ||
 			tile->obj.type == OBJ_ENEMY_EGG)
@@ -869,10 +919,9 @@ void start_tower_phase(void)
 	map_clear_selected();
 	map_clear_can_still_act();
 
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 	{
-		tile_t* tile = map_tile(x, y);
+		tile_t* tile = map_tile(tc);
 		if (tile->obj.type == OBJ_TOWER)
 		{
 			tile->obj.can_still_act = true;
@@ -894,10 +943,9 @@ void start_player_phase(void)
 	g_phase_time = 0;
 	map_clear_can_still_act();
 
-	for (int y = 0; y < g_map_side; y++)
-	for (int x = 0; x < g_map_side; x++)
+	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 	{
-		tile_t* tile = map_tile(x, y);
+		tile_t* tile = map_tile(tc);
 		if (tile->obj.type == OBJ_UNIT_RED)
 		{
 			tile->obj.can_still_act = true;
@@ -909,9 +957,11 @@ void game_perform(void)
 {
 	if (g_motion.t_max > 0)
 	{
+		/* An animaion is playing, it takes priority. */
 		if (g_motion.t >= g_motion.t_max)
 		{
-			tile_t* dst_tile = map_tile(g_motion.dst_x, g_motion.dst_y);
+			/* The animation is over and its result must be applied to the map. */
+			tile_t* dst_tile = map_tile(g_motion.dst);
 			if (dst_tile->obj.type == OBJ_CRYSTAL)
 			{
 				g_game_over = true;
@@ -982,13 +1032,16 @@ int main(void)
 		assert(false);
 	}
 
-	g_font = TTF_OpenFontRW(SDL_RWFromConstMem(
-		g_asset_font, g_asset_font_size), 0, 20);
+	SDL_RWops* rwops_font = SDL_RWFromConstMem(
+		g_asset_font,
+		g_asset_font_size);
+	assert(rwops_font != NULL);
+	g_font = TTF_OpenFontRW(rwops_font, 0, 20);
 	assert(g_font != NULL);
 
 	init_sprite_sheet();
 	
-	g_map_side = WINDOW_SIDE / CELL_SIDE_PIXELS;
+	g_map_side = WINDOW_SIDE / TILE_SIDE_PIXELS;
 	g_map_grid = calloc(g_map_side * g_map_side, sizeof(tile_t));
 	g_motion = (motion_t){0};
 	map_generate();
@@ -1027,7 +1080,7 @@ int main(void)
 					}
 				break;
 				case SDL_MOUSEMOTION:
-					handle_mouse_motion(event.motion.x, event.motion.y);
+					handle_mouse_motion((sc_t){event.motion.x, event.motion.y});
 				break;
 				case SDL_MOUSEBUTTONDOWN:
 					if (event.button.button == SDL_BUTTON_MIDDLE && g_phase == PHASE_PLAYER)
@@ -1051,10 +1104,10 @@ int main(void)
 
 		char string[60];
 		sprintf(string, "TURN %d", g_turn);
-		draw_text(string, 0, 0, 0, 0, 0, false);
+		draw_text(string, (rgb_t){0, 0, 0}, (sc_t){0, 0}, false);
 		if (g_game_over)
 		{
-			draw_text("GAME OVER", 0, 0, 0, 0, 20, false);
+			draw_text("GAME OVER", (rgb_t){0, 0, 0}, (sc_t){0, 20}, false);
 		}
 		
 		SDL_RenderPresent(g_renderer);
