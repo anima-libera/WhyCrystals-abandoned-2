@@ -11,6 +11,39 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 
+int max(int a, int b)
+{
+	return a < b ? b : a;
+}
+
+int min(int a, int b)
+{
+	return a < b ? a : b;
+}
+
+/* Changes the length of a dynamic vector.
+ * Here is an example of the intended use:
+ *    int da_len, da_cap;
+ *    elem_t* da;
+ *    ...
+ *    DA_LENGTHEN(da_len += 1, da_cap, da, elem_t);
+ * Notice how the first argument must be an expression that evaluates
+ * to the new length of the dynamic array (and if it has the side effect
+ * of updating the length variable it is even better).
+ * The new elements are not initialized. */
+#define DA_LENGTHEN(len_expr_, cap_, array_ptr_, elem_type_) \
+	do { \
+		int const len_ = len_expr_; \
+		if (len_ > cap_) \
+		{ \
+			int const new_cap = max(len_, ((float)cap_ + 2.3f) * 1.3f); \
+			elem_type_* new_array = realloc(array_ptr_, new_cap * sizeof(elem_type_)); \
+			assert(new_array != NULL); \
+			array_ptr_ = new_array; \
+			cap_ = new_cap; \
+		} \
+	} while (0)
+
 /* Tile coordinates. */
 struct tc_t
 {
@@ -18,52 +51,111 @@ struct tc_t
 };
 typedef struct tc_t tc_t;
 
-tc_t g_crystal_tc;
-
-int g_map_side;
-
-void tc_iter(tc_t* tc)
+struct rect_t
 {
-	tc->x++;
-	if (tc->x >= g_map_side)
+	int x, y, w, h;
+};
+typedef struct rect_t rect_t;
+
+struct tc_iter_rect_t
+{
+	tc_t tc;
+	rect_t rect;
+};
+typedef struct tc_iter_rect_t tc_iter_rect_t;
+
+tc_iter_rect_t tc_iter_rect_init(rect_t rect)
+{
+	return (tc_iter_rect_t){
+		.tc = {.x = rect.x, .y = rect.y},
+		.rect = rect};
+}
+
+rect_t tctc_to_rect(tc_t a, tc_t b)
+{
+	return (rect_t){
+		.x = min(a.x, b.x),
+		.y = min(a.y, b.y),
+		.w = abs(a.x - b.x),
+		.h = abs(a.y - b.y)};
+}
+
+rect_t tc_radius_to_rect(tc_t tc, int radius)
+{
+	return (rect_t){
+		.x = tc.x - radius,
+		.y = tc.y - radius,
+		.w = radius * 2,
+		.h = radius * 2};
+}
+
+void tc_iter_rect_next(tc_iter_rect_t* it)
+{
+	it->tc.x++;
+	if (it->tc.x > it->rect.x + it->rect.w)
 	{
-		tc->x = 0;
-		tc->y++;
+		it->tc.x = it->rect.x;
+		it->tc.y++;
 	}
 }
 
-bool tc_in_map(tc_t tc)
+bool tc_iter_rect_cond(tc_iter_rect_t* it)
 {
-	return 0 <= tc.x && tc.x < g_map_side && 0 <= tc.y && tc.y < g_map_side;
+	return it->tc.y < it->rect.y + it->rect.h;
 }
+
+typedef struct tc_iter_all_t tc_iter_all_t;
+tc_iter_all_t tc_iter_all_init(void);
+void tc_iter_all_next(tc_iter_all_t* it);
+bool tc_iter_all_cond(tc_iter_all_t* it);
+
+bool tc_in_map(tc_t tc);
 
 bool tc_eq(tc_t tc_a, tc_t tc_b)
 {
 	return tc_a.x == tc_b.x && tc_a.y == tc_b.y;
 }
 
+tc_t g_crystal_tc;
+
 /* Iterates over the tiles of the map in a spiral pattern
- * centered on the crystal and growing outwards. */
-void tc_iter_spiral_crystal(tc_t* tc)
+ * centered on the given center and growing outwards. */
+struct tc_iter_all_spiral_t
+{
+	tc_t tc;
+	tc_t center;
+	bool is_done;
+};
+typedef struct tc_iter_all_spiral_t tc_iter_all_spiral_t;
+
+tc_iter_all_spiral_t tc_iter_all_spiral_init(tc_t center)
+{
+	return (tc_iter_all_spiral_t){
+		.tc = center,
+		.center = center,
+		.is_done = false};
+}
+
+void tc_iter_all_spiral_next(tc_iter_all_spiral_t* it)
 {
 	/* In there, the `spiral_tc` will follow the spiral path.
 	 * That path is a succession of 'rings' in a <> shape,
 	 * from small rings to big rings.
-	 * When `spiral_tc` encounters `tc` then the next tile is
+	 * When `spiral_tc` encounters `it.tc` then the next tile is
 	 * the good one (this is indicated by `sync` being true),
 	 * except if it is outside the map (in which case
 	 * we just keep going until we get back in the map).
-	 * We actually start by the ring in which `tc` already is.
+	 * We actually start by the ring in which `it.tc` already is.
 	 * If an entire ring is iterated over without ever touching the map,
 	 * then it means it is time to stop. */
 
-	int dist = abs(tc->x - g_crystal_tc.x) + abs(tc->y - g_crystal_tc.y);
-	bool sync = tc_eq(g_crystal_tc, *tc);
+	int dist = abs(it->tc.x - it->center.x) + abs(it->tc.y - it->center.y);
+	bool sync = tc_eq(it->center, it->tc);
 	while (true)
 	{
-		tc_t spiral_tc = {.x = g_crystal_tc.x - dist, .y = g_crystal_tc.y};
-		tc_t ring_end_tc = dist == 0 ? g_crystal_tc :
-			(tc_t){.x = g_crystal_tc.x - dist + 1, .y = g_crystal_tc.y + 1};
+		tc_t spiral_tc = {.x = it->center.x - dist, .y = it->center.y};
+		tc_t ring_end_tc = dist == 0 ? it->center :
+			(tc_t){.x = it->center.x - dist + 1, .y = it->center.y + 1};
 		bool ring_is_out = true;
 
 		struct dir_t { int dx, dy; };
@@ -77,7 +169,7 @@ void tc_iter_spiral_crystal(tc_t* tc)
 				{
 					ring_is_out = false;
 				}
-				if (tc_eq(spiral_tc, *tc))
+				if (tc_eq(spiral_tc, it->tc))
 				{
 					sync = true;
 				}
@@ -85,7 +177,7 @@ void tc_iter_spiral_crystal(tc_t* tc)
 				if (tc_eq(spiral_tc, ring_end_tc))
 				{
 					/* Going to the next ring. */
-					spiral_tc = (tc_t){.x = g_crystal_tc.x - (dist+1), .y = g_crystal_tc.y};
+					spiral_tc = (tc_t){.x = it->center.x - (dist+1), .y = it->center.y};
 				}
 				else
 				{
@@ -95,7 +187,7 @@ void tc_iter_spiral_crystal(tc_t* tc)
 
 				if (sync && tc_in_map(spiral_tc))
 				{
-					*tc = spiral_tc;
+					it->tc = spiral_tc;
 					return;
 				}
 				if (dist == 0)
@@ -111,13 +203,17 @@ void tc_iter_spiral_crystal(tc_t* tc)
 		if (ring_is_out)
 		{
 			/* If the ring never enters the map, then it means all the tiles
-			 * of the map have been iterated over, and it has to end,
-			 * thus here we go out of the grid volontarily to end the iteration. */
-			*tc = (tc_t){.x = 0, .y = g_map_side};
+			 * of the map have been iterated over, and it has to end. */
+			it->is_done = true;
 			return;
 		}
 		dist++;
 	}
+}
+
+bool tc_iter_all_spiral_cond(tc_iter_all_spiral_t* it)
+{
+	return !it->is_done;
 }
 
 /* Screen coordinates. */
@@ -144,9 +240,18 @@ sc_t tc_to_sc(tc_t tc)
 
 tc_t sc_to_tc(sc_t sc)
 {
-	return (tc_t){
+	tc_t tc = {
 		(sc.x - g_tc_sc_offset.x) / g_tile_side_pixels,
 		(sc.y - g_tc_sc_offset.y) / g_tile_side_pixels};
+	if ((sc.x - g_tc_sc_offset.x) < 0)
+	{
+		tc.x--;
+	}
+	if ((sc.y - g_tc_sc_offset.y) < 0)
+	{
+		tc.y--;
+	}
+	return tc;
 }
 
 struct rgb_t
@@ -321,26 +426,139 @@ struct motion_t
 };
 typedef struct motion_t motion_t;
 
-tile_t* g_map_grid;
 motion_t g_motion;
 
-tile_t* map_tile(tc_t tc)
+#define CHUNK_SIDE 16
+
+struct chunk_t
 {
-	if (tc_in_map(tc))
+	tc_t top_left_tc;
+	tile_t* tiles;
+};
+typedef struct chunk_t chunk_t;
+
+/* Tiles are stored in fixed-sized chunks, and chunks are stored in a dynaic array.
+ * New chunks can be generated without having to move the existing tiles (so there
+ * is no need to worry about the validity of pointers to tiles). */
+int g_chunk_da_len = 0, g_chunk_da_cap = 0;
+chunk_t* g_chunk_da = NULL;
+
+/* The cool modulo operator, the one that gives 7 for -3 mod 10. */
+int cool_mod(int a, int b)
+{
+	assert(b > 0);
+	if (a >= 0)
 	{
-		return &g_map_grid[tc.y * g_map_side + tc.x];
+		return a % b;
 	}
 	else
 	{
-		return NULL;
+		return (b - ((-a) % b)) % b;
 	}
+}
+
+bool tc_in_map(tc_t tc)
+{
+	for (int i = 0; i < g_chunk_da_len; i++)
+	{
+		chunk_t* chunk = &g_chunk_da[i];
+		if (chunk->top_left_tc.x <= tc.x && tc.x < chunk->top_left_tc.x + CHUNK_SIDE &&
+			chunk->top_left_tc.y <= tc.y && tc.y < chunk->top_left_tc.y + CHUNK_SIDE)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+tile_t* map_tile(tc_t tc)
+{
+	/* Search in the already generated chunks first. */
+	for (int i = 0; i < g_chunk_da_len; i++)
+	{
+		chunk_t* chunk = &g_chunk_da[i];
+		if (chunk->top_left_tc.x <= tc.x && tc.x < chunk->top_left_tc.x + CHUNK_SIDE &&
+			chunk->top_left_tc.y <= tc.y && tc.y < chunk->top_left_tc.y + CHUNK_SIDE)
+		{
+			int inchunk_x = tc.x - chunk->top_left_tc.x;
+			int inchunk_y = tc.y - chunk->top_left_tc.y;
+			return &chunk->tiles[inchunk_y * CHUNK_SIDE + inchunk_x];
+		}
+	}
+	/* It seems that the requested tile was not generated yet,
+	 * so we generate the chunk that contains it now. */
+	DA_LENGTHEN(g_chunk_da_len += 1, g_chunk_da_cap, g_chunk_da, chunk_t);
+	chunk_t* chunk = &g_chunk_da[g_chunk_da_len-1];
+	chunk->top_left_tc.x = tc.x - cool_mod(tc.x, CHUNK_SIDE);
+	chunk->top_left_tc.y = tc.y - cool_mod(tc.y, CHUNK_SIDE);
+	chunk->tiles = calloc(CHUNK_SIDE * CHUNK_SIDE, sizeof(tile_t));
+	for (int i = 0; i < CHUNK_SIDE * CHUNK_SIDE; i++)
+	{
+		chunk->tiles[i].floor = FLOOR_GRASSLAND;
+		if (rand() % 3 == 0)
+		{
+			chunk->tiles[i].obj = (obj_t){.type = OBJ_TREE};
+		}
+	}
+	int inchunk_x = tc.x - chunk->top_left_tc.x;
+	int inchunk_y = tc.y - chunk->top_left_tc.y;
+	return &chunk->tiles[inchunk_y * CHUNK_SIDE + inchunk_x];
+}
+
+struct tc_iter_all_t
+{
+	tc_t tc;
+	int chunk_index;
+};
+typedef struct tc_iter_all_t tc_iter_all_t;
+
+tc_iter_all_t tc_iter_all_init(void)
+{
+	if (g_chunk_da_len == 0)
+	{
+		return (tc_iter_all_t){.chunk_index = 0};
+	}
+	else
+	{
+		return (tc_iter_all_t){
+			.chunk_index = 0,
+			.tc = g_chunk_da[0].top_left_tc};
+	}
+}
+
+void tc_iter_all_next(tc_iter_all_t* it)
+{
+	assert(it->chunk_index < g_chunk_da_len);
+	chunk_t* chunk = &g_chunk_da[it->chunk_index];
+	it->tc.x++;
+	if (it->tc.x >= chunk->top_left_tc.x + CHUNK_SIDE)
+	{
+		it->tc.x = chunk->top_left_tc.x;
+		it->tc.y++;
+		if (it->tc.y >= chunk->top_left_tc.y + CHUNK_SIDE)
+		{
+			it->chunk_index++;
+			if (it->chunk_index < g_chunk_da_len)
+			{
+				it->tc = g_chunk_da[it->chunk_index].top_left_tc;
+			}
+		}
+	}
+}
+
+bool tc_iter_all_cond(tc_iter_all_t* it)
+{
+	return it->chunk_index < g_chunk_da_len;
 }
 
 void draw_map(void)
 {
-	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
+	tc_t top_left_tc = sc_to_tc((sc_t){0, 0});
+	tc_t bottom_right_tc = sc_to_tc((sc_t){WINDOW_SIDE-1, WINDOW_SIDE-1});
+	for (tc_iter_rect_t it = tc_iter_rect_init(tctc_to_rect(top_left_tc, bottom_right_tc));
+		tc_iter_rect_cond(&it); tc_iter_rect_next(&it))
 	{
-		draw_tile(map_tile(tc), tc_to_sc(tc), g_tile_side_pixels);
+		draw_tile(map_tile(it.tc), tc_to_sc(it.tc), g_tile_side_pixels);
 	}
 
 	if (g_motion.t_max > 0)
@@ -358,9 +576,11 @@ void draw_map(void)
 
 void map_generate(void)
 {
-	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
+	for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect((tc_t){0, 0}, 8));
+		tc_iter_rect_cond(&it); tc_iter_rect_next(&it))
 	{
-		tile_t* tile = map_tile(tc);
+		tile_t* tile = map_tile(it.tc);
+		*tile = (tile_t){0};
 
 		if (rand() % 7 == 1)
 		{
@@ -384,8 +604,8 @@ void map_generate(void)
 
 	/* Place the crystal somewhere near the middle of the map. */
 	g_crystal_tc = (tc_t){
-		g_map_side / 2 + rand() % 5 - 2,
-		g_map_side / 2 + rand() % 5 - 2};
+		rand() % 5 - 2,
+		rand() % 5 - 2};
 	map_tile(g_crystal_tc)->obj = (obj_t){.type = OBJ_CRYSTAL};
 
 	/* Place the 3 units around the crystal. */
@@ -403,10 +623,10 @@ void map_generate(void)
 
 	/* Making sure that enemies close to the crystal are eggs so that the player
 	 * has some time to take action against them. */
-	for (tc.y = g_crystal_tc.y - 2; tc.y < g_crystal_tc.y + 3; tc.y++)
-	for (tc.x = g_crystal_tc.x - 2; tc.x < g_crystal_tc.x + 3; tc.x++)
+	for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect(g_crystal_tc, 3));
+		tc_iter_rect_cond(&it); tc_iter_rect_next(&it))
 	{
-		tile_t* tile = map_tile(tc);
+		tile_t* tile = map_tile(it.tc);
 		if (tile->obj.type == OBJ_ENEMY_FLY)
 		{
 			tile->obj.type = OBJ_ENEMY_EGG;
@@ -416,41 +636,46 @@ void map_generate(void)
 
 void map_clear_available(void)
 {
-	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
+	for (tc_iter_all_t it = tc_iter_all_init();
+		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
-		map_tile(tc)->is_available = false;
+		map_tile(it.tc)->is_available = false;
 	}
 }
 
 void map_clear_hovered(void)
 {
-	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
+	for (tc_iter_all_t it = tc_iter_all_init();
+		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
-		map_tile(tc)->is_hovered = false;
+		map_tile(it.tc)->is_hovered = false;
 	}
 }
 
 void map_clear_selected(void)
 {
-	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
+	for (tc_iter_all_t it = tc_iter_all_init();
+		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
-		map_tile(tc)->is_selected = false;
+		map_tile(it.tc)->is_selected = false;
 	}
 }
 
 void map_clear_can_still_act(void)
 {
-	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
+	for (tc_iter_all_t it = tc_iter_all_init();
+		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
-		map_tile(tc)->obj.can_still_act = false;
+		map_tile(it.tc)->obj.can_still_act = false;
 	}
 }
 
 tile_t* map_hovered_tile(void)
 {
-	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
+	for (tc_iter_all_t it = tc_iter_all_init();
+		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
-		tile_t* tile = map_tile(tc);
+		tile_t* tile = map_tile(it.tc);
 		if (tile->is_hovered)
 		{
 			return tile;
@@ -461,9 +686,10 @@ tile_t* map_hovered_tile(void)
 
 tile_t* map_selected_tile(void)
 {
-	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
+	for (tc_iter_all_t it = tc_iter_all_init();
+		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
-		tile_t* tile = map_tile(tc);
+		tile_t* tile = map_tile(it.tc);
 		if (tile->is_selected)
 		{
 			return tile;
@@ -472,12 +698,24 @@ tile_t* map_selected_tile(void)
 	return NULL;
 }
 
+/* Returns the coordinates of the given tile (that must be from the map). */
 tc_t map_tile_tc(tile_t* tile)
 {
-	int offset = tile - g_map_grid;
-	return (tc_t){
-		.x = offset % g_map_side,
-		.y = offset / g_map_side};
+	assert(tile != NULL);
+	for (int i = 0; i < g_chunk_da_len; i++)
+	{
+		chunk_t* chunk = &g_chunk_da[i];
+		if (chunk->tiles <= tile && tile < chunk->tiles + CHUNK_SIDE * CHUNK_SIDE)
+		{
+			int offset = tile - chunk->tiles;
+			int inchunk_x = offset % CHUNK_SIDE;
+			int inchunk_y = offset / CHUNK_SIDE;
+			return (tc_t){
+				.x = inchunk_x + chunk->top_left_tc.x,
+				.y = inchunk_y + chunk->top_left_tc.y};
+		}
+	}
+	assert(false);
 }
 
 void handle_mouse_motion(sc_t sc)
@@ -574,13 +812,14 @@ void handle_mouse_click(bool is_left_click)
 		/* A unit that can still act is selected, accessible tiles
 		 * have to be flagged as available for action. */
 		tc_t const selected_tc = map_tile_tc(new_selected);
-		for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
+		for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect(selected_tc, 2));
+			tc_iter_rect_cond(&it); tc_iter_rect_next(&it))
 		{
-			int const dist = abs(tc.x - selected_tc.x) + abs(tc.y - selected_tc.y);
+			int const dist = abs(it.tc.x - selected_tc.x) + abs(it.tc.y - selected_tc.y);
 			bool is_accessible =
 				dist != 0 && dist <= 2 &&
-				map_tile(tc)->obj.type == OBJ_NONE;
-			map_tile(tc)->is_available = is_accessible;
+				map_tile(it.tc)->obj.type == OBJ_NONE;
+			map_tile(it.tc)->is_available = is_accessible;
 		}
 	}
 }
@@ -657,8 +896,10 @@ void handle_mouse_wheel(int wheel_motion)
 
 bool game_play_enemy(void)
 {
-	for (tc_t src_tc = g_crystal_tc; tc_in_map(src_tc); tc_iter_spiral_crystal(&src_tc))
+	for (tc_iter_all_spiral_t it = tc_iter_all_spiral_init(g_crystal_tc);
+		tc_iter_all_spiral_cond(&it); tc_iter_all_spiral_next(&it))
 	{
+		tc_t src_tc = it.tc;
 		tile_t* src_tile = map_tile(src_tc);
 		if (src_tile->obj.can_still_act)
 		{
@@ -902,23 +1143,23 @@ bool game_play_enemy(void)
 
 	/* Spawn enemy flies in the top corners. */
 	if ((rand() >> 3) % 2 == 0 &&
-		map_tile((tc_t){0, 0})->obj.type != OBJ_ENEMY_FLY)
+		map_tile((tc_t){-8, 4})->obj.type != OBJ_ENEMY_FLY)
 	{
 		g_motion.t = 0;
 		g_motion.t_max = 6;
-		g_motion.src = (tc_t){-1, -1};
-		g_motion.dst = (tc_t){0, 0};
+		g_motion.src = (tc_t){-9, 4};
+		g_motion.dst = (tc_t){-8, 4};
 		g_motion.obj = (obj_t){.type = OBJ_ENEMY_FLY};
 		g_motion.obj.can_still_act = false;
 		return false;
 	}
 	if ((rand() >> 3) % 2 == 0 &&
-		map_tile((tc_t){g_map_side-1, 0})->obj.type != OBJ_ENEMY_FLY)
+		map_tile((tc_t){8, -4})->obj.type != OBJ_ENEMY_FLY)
 	{
 		g_motion.t = 0;
 		g_motion.t_max = 6;
-		g_motion.src = (tc_t){g_map_side, -1};
-		g_motion.dst = (tc_t){g_map_side-1, 0};
+		g_motion.src = (tc_t){9, -4};
+		g_motion.dst = (tc_t){8, -4};
 		g_motion.obj = (obj_t){.type = OBJ_ENEMY_FLY};
 		g_motion.obj.can_still_act = false;
 		return false;
@@ -926,23 +1167,23 @@ bool game_play_enemy(void)
 
 	/* Spawn big enemies in the bottom corners. */
 	if (g_turn > 10 && g_turn % 7 == 0 &&
-		map_tile((tc_t){0, g_map_side-1})->obj.type != OBJ_ENEMY_BIG)
+		map_tile((tc_t){0, 9})->obj.type != OBJ_ENEMY_BIG)
 	{
 		g_motion.t = 0;
 		g_motion.t_max = 6;
-		g_motion.src = (tc_t){-1, g_map_side};
-		g_motion.dst = (tc_t){0, g_map_side-1};
+		g_motion.src = (tc_t){0, 10};
+		g_motion.dst = (tc_t){0, 9};
 		g_motion.obj = (obj_t){.type = OBJ_ENEMY_BIG};
 		g_motion.obj.can_still_act = false;
 		return false;
 	}
 	if (g_turn > 10 && g_turn % 7 == 1 &&
-		map_tile((tc_t){g_map_side-1, g_map_side-1})->obj.type != OBJ_ENEMY_BIG)
+		map_tile((tc_t){0, -9})->obj.type != OBJ_ENEMY_BIG)
 	{
 		g_motion.t = 0;
 		g_motion.t_max = 6;
-		g_motion.src = (tc_t){g_map_side, g_map_side};
-		g_motion.dst = (tc_t){g_map_side-1, g_map_side-1};
+		g_motion.src = (tc_t){0, -10};
+		g_motion.dst = (tc_t){0, -9};
 		g_motion.obj = (obj_t){.type = OBJ_ENEMY_BIG};
 		g_motion.obj.can_still_act = false;
 		return false;
@@ -971,8 +1212,10 @@ void tower_shoot(tc_t tower_tc, tc_t target_tc)
 
 bool game_play_towers(void)
 {
-	for (tc_t src_tc = g_crystal_tc; tc_in_map(src_tc); tc_iter_spiral_crystal(&src_tc))
+	for (tc_iter_all_spiral_t it = tc_iter_all_spiral_init(g_crystal_tc);
+		tc_iter_all_spiral_cond(&it); tc_iter_all_spiral_next(&it))
 	{
+		tc_t src_tc = it.tc;
 		tile_t* tower_tile = map_tile(src_tc);
 		if (tower_tile->obj.can_still_act)
 		{
@@ -1050,9 +1293,10 @@ void start_enemy_phase(void)
 	map_clear_selected();
 	map_clear_can_still_act();
 
-	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
+	for (tc_iter_all_t it = tc_iter_all_init();
+		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
-		tile_t* tile = map_tile(tc);
+		tile_t* tile = map_tile(it.tc);
 		if (tile->obj.type == OBJ_ENEMY_FLY ||
 			tile->obj.type == OBJ_ENEMY_BIG ||
 			tile->obj.type == OBJ_ENEMY_EGG)
@@ -1070,9 +1314,10 @@ void start_tower_phase(void)
 	map_clear_selected();
 	map_clear_can_still_act();
 
-	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
+	for (tc_iter_all_t it = tc_iter_all_init();
+		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
-		tile_t* tile = map_tile(tc);
+		tile_t* tile = map_tile(it.tc);
 		if (tile->obj.type == OBJ_TOWER)
 		{
 			tile->obj.can_still_act = true;
@@ -1094,9 +1339,10 @@ void start_player_phase(void)
 	g_phase_time = 0;
 	map_clear_can_still_act();
 
-	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
+	for (tc_iter_all_t it = tc_iter_all_init();
+		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
-		tile_t* tile = map_tile(tc);
+		tile_t* tile = map_tile(it.tc);
 		if (tile->obj.type == OBJ_UNIT_RED)
 		{
 			tile->obj.can_still_act = true;
@@ -1194,10 +1440,11 @@ int main(void)
 
 	init_sprite_sheet();
 	
-	g_map_side = WINDOW_SIDE / g_tile_side_pixels;
-	g_map_grid = calloc(g_map_side * g_map_side, sizeof(tile_t));
 	g_motion = (motion_t){0};
 	map_generate();
+	
+	g_tc_sc_offset.x = WINDOW_SIDE / 2;
+	g_tc_sc_offset.y = WINDOW_SIDE / 2;
 
 	g_tower_available = true;
 	g_turn = 0;
