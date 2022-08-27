@@ -130,14 +130,21 @@ typedef struct sc_t sc_t;
 #define TILE_SIDE_PIXELS 64
 #define WINDOW_SIDE (800 - 800 % TILE_SIDE_PIXELS)
 
+/* What are the screen coordinates of the tile at (0, 0) ? */
+sc_t g_tc_sc_offset = {0};
+
 sc_t tc_to_sc(tc_t tc)
 {
-	return (sc_t){tc.x * TILE_SIDE_PIXELS, tc.y * TILE_SIDE_PIXELS};
+	return (sc_t){
+		tc.x * TILE_SIDE_PIXELS + g_tc_sc_offset.x,
+		tc.y * TILE_SIDE_PIXELS + g_tc_sc_offset.y};
 }
 
 tc_t sc_to_tc(sc_t sc)
 {
-	return (tc_t){sc.x / TILE_SIDE_PIXELS, sc.y / TILE_SIDE_PIXELS};
+	return (tc_t){
+		(sc.x - g_tc_sc_offset.x) / TILE_SIDE_PIXELS,
+		(sc.y - g_tc_sc_offset.y) / TILE_SIDE_PIXELS};
 }
 
 struct rgb_t
@@ -341,7 +348,9 @@ void draw_map(void)
 		float x = (float)m->src.x * (1.0f - r) + (float)m->dst.x * r;
 		float y = (float)m->src.y * (1.0f - r) + (float)m->dst.y * r;
 		draw_obj(&m->obj,
-			(sc_t){x * (float)TILE_SIDE_PIXELS, y * (float)TILE_SIDE_PIXELS},
+			(sc_t){
+				x * (float)TILE_SIDE_PIXELS + (float)g_tc_sc_offset.x,
+				y * (float)TILE_SIDE_PIXELS + (float)g_tc_sc_offset.y},
 			TILE_SIDE_PIXELS);
 	}
 }
@@ -474,7 +483,11 @@ void handle_mouse_motion(sc_t sc)
 {
 	/* Update the hovered tile. */
 	map_clear_hovered();
-	map_tile(sc_to_tc(sc))->is_hovered = true;
+	tile_t* tile = map_tile(sc_to_tc(sc));
+	if (tile != NULL)
+	{
+		tile->is_hovered = true;
+	}
 }
 
 /* A whole game turn is a succession of phases during which
@@ -506,7 +519,14 @@ void handle_mouse_click(bool is_left_click)
 	/* Update the selected tile. */
 	map_clear_selected();
 	tile_t* new_selected = map_hovered_tile();
-	new_selected->is_selected = true;
+	if (new_selected == NULL)
+	{
+		return;
+	}
+	if (is_left_click)
+	{
+		new_selected->is_selected = true;
+	}
 
 	/* If an animation is playing, then we forbid interaction. */
 	if (g_motion.t_max > 0)
@@ -1135,6 +1155,11 @@ int main(void)
 					}
 				break;
 				case SDL_MOUSEMOTION:
+					if (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT))
+					{
+						g_tc_sc_offset.x += event.motion.xrel;
+						g_tc_sc_offset.y += event.motion.yrel;
+					}
 					handle_mouse_motion((sc_t){event.motion.x, event.motion.y});
 				break;
 				case SDL_MOUSEBUTTONDOWN:
