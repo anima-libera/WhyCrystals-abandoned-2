@@ -127,8 +127,8 @@ struct sc_t
 };
 typedef struct sc_t sc_t;
 
-#define TILE_SIDE_PIXELS 64
-#define WINDOW_SIDE (800 - 800 % TILE_SIDE_PIXELS)
+int g_tile_side_pixels = 64;
+#define WINDOW_SIDE (800 - 800 % 64)
 
 /* What are the screen coordinates of the tile at (0, 0) ? */
 sc_t g_tc_sc_offset = {0};
@@ -136,15 +136,15 @@ sc_t g_tc_sc_offset = {0};
 sc_t tc_to_sc(tc_t tc)
 {
 	return (sc_t){
-		tc.x * TILE_SIDE_PIXELS + g_tc_sc_offset.x,
-		tc.y * TILE_SIDE_PIXELS + g_tc_sc_offset.y};
+		tc.x * g_tile_side_pixels + g_tc_sc_offset.x,
+		tc.y * g_tile_side_pixels + g_tc_sc_offset.y};
 }
 
 tc_t sc_to_tc(sc_t sc)
 {
 	return (tc_t){
-		(sc.x - g_tc_sc_offset.x) / TILE_SIDE_PIXELS,
-		(sc.y - g_tc_sc_offset.y) / TILE_SIDE_PIXELS};
+		(sc.x - g_tc_sc_offset.x) / g_tile_side_pixels,
+		(sc.y - g_tc_sc_offset.y) / g_tile_side_pixels};
 }
 
 struct rgb_t
@@ -338,7 +338,7 @@ void draw_map(void)
 {
 	for (tc_t tc = {0}; tc_in_map(tc); tc_iter(&tc))
 	{
-		draw_tile(map_tile(tc), tc_to_sc(tc), TILE_SIDE_PIXELS);
+		draw_tile(map_tile(tc), tc_to_sc(tc), g_tile_side_pixels);
 	}
 
 	if (g_motion.t_max > 0)
@@ -347,11 +347,10 @@ void draw_map(void)
 		float r = (float)m->t / (float)m->t_max;
 		float x = (float)m->src.x * (1.0f - r) + (float)m->dst.x * r;
 		float y = (float)m->src.y * (1.0f - r) + (float)m->dst.y * r;
-		draw_obj(&m->obj,
-			(sc_t){
-				x * (float)TILE_SIDE_PIXELS + (float)g_tc_sc_offset.x,
-				y * (float)TILE_SIDE_PIXELS + (float)g_tc_sc_offset.y},
-			TILE_SIDE_PIXELS);
+		sc_t sc = {
+			x * (float)g_tile_side_pixels + (float)g_tc_sc_offset.x,
+			y * (float)g_tile_side_pixels + (float)g_tc_sc_offset.y};
+		draw_obj(&m->obj, sc, g_tile_side_pixels);
 	}
 }
 
@@ -1116,7 +1115,7 @@ int main(void)
 
 	init_sprite_sheet();
 	
-	g_map_side = WINDOW_SIDE / TILE_SIDE_PIXELS;
+	g_map_side = WINDOW_SIDE / g_tile_side_pixels;
 	g_map_grid = calloc(g_map_side * g_map_side, sizeof(tile_t));
 	g_motion = (motion_t){0};
 	map_generate();
@@ -1152,6 +1151,13 @@ int main(void)
 								start_enemy_phase();
 							}
 						break;
+					}
+				break;
+				case SDL_MOUSEWHEEL:
+					g_tile_side_pixels += event.wheel.y;
+					if (g_tile_side_pixels <= 0)
+					{
+						g_tile_side_pixels = 1;
 					}
 				break;
 				case SDL_MOUSEMOTION:
