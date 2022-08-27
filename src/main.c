@@ -130,8 +130,10 @@ typedef struct sc_t sc_t;
 int g_tile_side_pixels = 64;
 #define WINDOW_SIDE (800 - 800 % 64)
 
-/* What are the screen coordinates of the tile at (0, 0) ? */
+/* What are the screen coordinates of top left corner of the tile at (0, 0) ? */
 sc_t g_tc_sc_offset = {0};
+
+float g_tc_sc_offset_frac_x = 0.0f, g_tc_sc_offset_frac_y = 0.0f;
 
 sc_t tc_to_sc(tc_t tc)
 {
@@ -516,7 +518,10 @@ void handle_mouse_click(bool is_left_click)
 	tile_t* old_selected = map_selected_tile();
 
 	/* Update the selected tile. */
-	map_clear_selected();
+	if (is_left_click)
+	{
+		map_clear_selected();
+	}
 	tile_t* new_selected = map_hovered_tile();
 	if (new_selected == NULL)
 	{
@@ -558,9 +563,13 @@ void handle_mouse_click(bool is_left_click)
 		map_clear_available();
 		return;
 	}
-	map_clear_available();
+	if (is_left_click)
+	{
+		map_clear_available();
+	}
 	if (new_selected->obj.type == OBJ_UNIT_RED &&
-		new_selected->obj.can_still_act)
+		new_selected->obj.can_still_act &&
+		is_left_click)
 	{
 		/* A unit that can still act is selected, accessible tiles
 		 * have to be flagged as available for action. */
@@ -574,6 +583,76 @@ void handle_mouse_click(bool is_left_click)
 			map_tile(tc)->is_available = is_accessible;
 		}
 	}
+}
+
+void handle_mouse_wheel(int wheel_motion)
+{
+	/* Save the precise position in the map (tc coordinate space)
+	 * where the mouse is pointing (before zooming) so that we can
+	 * move the map after zooming to put that position under the
+	 * mouse again (so that the zoom is on the cursor and not on
+	 * the top left corner of the tile at (0, 0)). */
+	sc_t mouse;
+	SDL_GetMouseState(&mouse.x, &mouse.y);
+	float old_float_tc_x =
+		(float)(mouse.x - g_tc_sc_offset.x) / (float)g_tile_side_pixels;
+	float old_float_tc_y =
+		(float)(mouse.y - g_tc_sc_offset.y) / (float)g_tile_side_pixels;
+	
+	/* Zoom. */
+	if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LCTRL])
+	{
+		/* Holding the left control key makes the zoom be pixel-per-pixel. */
+		g_tile_side_pixels += wheel_motion;
+		if (g_tile_side_pixels <= 0)
+		{
+			g_tile_side_pixels = 1;
+		}
+	}
+	else
+	{
+		/* Not holding the left control key makes the zoom be so that each pixel
+		 * from a sprite is exactly mapped on an integer number of pixels on the
+		 * screen. This is a sane default for now. */
+		if (g_tile_side_pixels % 16 != 0)
+		{
+			if (wheel_motion < 0)
+			{
+				g_tile_side_pixels -= g_tile_side_pixels % 16;
+				wheel_motion++;
+			}
+			else if (wheel_motion > 0)
+			{
+				g_tile_side_pixels -= g_tile_side_pixels % 16;
+				g_tile_side_pixels += 16;
+				wheel_motion--;
+			}
+		}
+		g_tile_side_pixels += wheel_motion * 16;
+		if (g_tile_side_pixels < 16)
+		{
+			g_tile_side_pixels = 16;
+		}
+		else if (g_tile_side_pixels > WINDOW_SIDE / 2)
+		{
+			g_tile_side_pixels = (WINDOW_SIDE / 2) - (WINDOW_SIDE / 2) % 16;
+		}
+	}
+
+	/* Moves the map to make sure that the precise point on the map pointed to
+	 * by the mouse is still under the mouse after. */
+	float new_float_tc_x =
+		(float)(mouse.x - g_tc_sc_offset.x) / (float)g_tile_side_pixels;
+	float new_float_tc_y =
+		(float)(mouse.y - g_tc_sc_offset.y) / (float)g_tile_side_pixels;
+	g_tc_sc_offset_frac_x +=
+		(new_float_tc_x - old_float_tc_x) * (float)g_tile_side_pixels;
+	g_tc_sc_offset.x += floorf(g_tc_sc_offset_frac_x);
+	g_tc_sc_offset_frac_x -= floorf(g_tc_sc_offset_frac_x);
+	g_tc_sc_offset_frac_y +=
+		(new_float_tc_y - old_float_tc_y) * (float)g_tile_side_pixels;
+	g_tc_sc_offset.y += floorf(g_tc_sc_offset_frac_y);
+	g_tc_sc_offset_frac_y -= floorf(g_tc_sc_offset_frac_y);
 }
 
 bool game_play_enemy(void)
@@ -1154,11 +1233,7 @@ int main(void)
 					}
 				break;
 				case SDL_MOUSEWHEEL:
-					g_tile_side_pixels += event.wheel.y;
-					if (g_tile_side_pixels <= 0)
-					{
-						g_tile_side_pixels = 1;
-					}
+					handle_mouse_wheel(event.wheel.y);
 				break;
 				case SDL_MOUSEMOTION:
 					if (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT))
