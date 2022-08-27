@@ -5,7 +5,7 @@
 
 Here is what it looks like for now:
 
-<img src="pics/screen_indev_01.gif" width="319px" height="257px" />
+<img src="pics/screen_indev_01.png" width="319px" height="257px" />
 
 It is not fun yet, come back later!
 
