@@ -676,7 +676,7 @@ void map_generate(void)
 		tile->obj = (obj_t){0};
 		if (tile->floor != FLOOR_WATER)
 		{
-			if (rand() % 21 == 1)
+			if (rand() % 17 == 1)
 			{
 				tile->obj.type = OBJ_ENEMY_FLY;
 			}
@@ -1068,6 +1068,60 @@ void handle_mouse_wheel(int wheel_motion)
 	g_tc_sc_offset_frac_y -= floorf(g_tc_sc_offset_frac_y);
 }
 
+int tc_dist(tc_t a, tc_t b)
+{
+	return abs(a.x - b.x) + abs(a.y - b.y);
+}
+
+bool obj_type_is_enemy(obj_type_t type)
+{
+	switch (type)
+	{
+		case OBJ_ENEMY_FLY:
+		case OBJ_ENEMY_BIG:
+		case OBJ_ENEMY_EGG:
+			return true;
+		default:
+			return false;
+	}
+}
+
+int g_enemy_already_spawn_count;
+
+void spawn_one_enemy(obj_type_t type)
+{
+	assert(obj_type_is_enemy(type));
+
+	/* Find a spawn location. There is a source and a destination for
+	 * the little animation when spawning (as if the enemy comes from
+	 * even farer). */
+	int const spawn_distance = 14;
+	tc_t spawn_location_src = g_crystal_tc;
+	tc_t spawn_location_dst = g_crystal_tc;
+	while (tc_dist(spawn_location_dst, g_crystal_tc) < spawn_distance ||
+		obj_type_is_enemy(map_tile(spawn_location_dst)->obj.type))
+	{
+		spawn_location_dst = spawn_location_src;
+		if (rand() % 2 == 0)
+		{
+			spawn_location_src.x += rand() % 3 - 1;
+		}
+		else
+		{
+			spawn_location_src.y += rand() % 3 - 1;
+		}
+	}
+
+	g_motion.t = 0;
+	g_motion.t_max = 6;
+	g_motion.src = spawn_location_src;
+	g_motion.dst = spawn_location_dst;
+	g_motion.obj = (obj_t){.type = type};
+	g_motion.obj.can_still_act = false;
+
+	g_enemy_already_spawn_count++;
+}
+
 bool game_play_enemy(void)
 {
 	for (tc_iter_all_spiral_t it = tc_iter_all_spiral_init(g_crystal_tc);
@@ -1315,52 +1369,21 @@ bool game_play_enemy(void)
 		}
 	}
 
-	/* Spawn enemy flies in the top corners. */
-	if ((rand() >> 3) % 2 == 0 &&
-		map_tile((tc_t){-8, 4})->obj.type != OBJ_ENEMY_FLY)
+	int const enemy_spawn_number =
+		g_turn <  5 ? 1 :
+		g_turn < 10 ? 1 + (g_turn % 2) :
+		g_turn < 20 ? 2 + (g_turn % 2) :
+		g_turn < 30 ? 3 :
+		4;
+	while (g_enemy_already_spawn_count < enemy_spawn_number)
 	{
-		g_motion.t = 0;
-		g_motion.t_max = 6;
-		g_motion.src = (tc_t){-9, 4};
-		g_motion.dst = (tc_t){-8, 4};
-		g_motion.obj = (obj_t){.type = OBJ_ENEMY_FLY};
-		g_motion.obj.can_still_act = false;
-		return false;
-	}
-	if ((rand() >> 3) % 2 == 0 &&
-		map_tile((tc_t){8, -4})->obj.type != OBJ_ENEMY_FLY)
-	{
-		g_motion.t = 0;
-		g_motion.t_max = 6;
-		g_motion.src = (tc_t){9, -4};
-		g_motion.dst = (tc_t){8, -4};
-		g_motion.obj = (obj_t){.type = OBJ_ENEMY_FLY};
-		g_motion.obj.can_still_act = false;
+		spawn_one_enemy(OBJ_ENEMY_FLY);
 		return false;
 	}
 
-	/* Spawn big enemies in the bottom corners. */
-	if (g_turn > 10 && g_turn % 7 == 0 &&
-		map_tile((tc_t){0, 9})->obj.type != OBJ_ENEMY_BIG)
+	if (g_turn >= 5 && g_turn % 5 == 0)
 	{
-		g_motion.t = 0;
-		g_motion.t_max = 6;
-		g_motion.src = (tc_t){0, 10};
-		g_motion.dst = (tc_t){0, 9};
-		g_motion.obj = (obj_t){.type = OBJ_ENEMY_BIG};
-		g_motion.obj.can_still_act = false;
-		return false;
-	}
-	if (g_turn > 10 && g_turn % 7 == 1 &&
-		map_tile((tc_t){0, -9})->obj.type != OBJ_ENEMY_BIG)
-	{
-		g_motion.t = 0;
-		g_motion.t_max = 6;
-		g_motion.src = (tc_t){0, -10};
-		g_motion.dst = (tc_t){0, -9};
-		g_motion.obj = (obj_t){.type = OBJ_ENEMY_BIG};
-		g_motion.obj.can_still_act = false;
-		return false;
+		spawn_one_enemy(OBJ_ENEMY_BIG);
 	}
 
 	return true;
@@ -1463,6 +1486,7 @@ void start_enemy_phase(void)
 {
 	g_phase = PHASE_ENEMY;
 	g_phase_time = 0;
+	g_enemy_already_spawn_count = 0;
 	map_clear_options();
 	map_clear_selected();
 	map_clear_can_still_act();
