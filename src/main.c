@@ -76,8 +76,8 @@ rect_t tctc_to_rect(tc_t a, tc_t b)
 	return (rect_t){
 		.x = min(a.x, b.x),
 		.y = min(a.y, b.y),
-		.w = abs(a.x - b.x),
-		.h = abs(a.y - b.y)};
+		.w = abs(a.x - b.x) + 1,
+		.h = abs(a.y - b.y) + 1};
 }
 
 rect_t tc_radius_to_rect(tc_t tc, int radius)
