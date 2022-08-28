@@ -1609,7 +1609,8 @@ void center_view(tc_t tc)
 
 int main(void)
 {
-	printf("Why Crystals ? version 0.0.1 indev\n");
+	printf("Why Crystals ? version 0.0.2 indev\n");
+	printf("Hold the LEFT CONTROL key to display the controls\n");
 
 	srand(time(NULL));
 
@@ -1712,13 +1713,32 @@ int main(void)
 		
 		draw_map();
 
-		char string[60];
-		sprintf(string, "TURN %d", g_turn);
-		draw_text(string, (rgb_t){0, 0, 0}, (sc_t){0, 0}, false);
+		char string[200];
+		int y = 0;
+		#define DRAW_TEXT(...) \
+			snprintf(string, sizeof string, __VA_ARGS__); \
+			draw_text(string, (rgb_t){0, 0, 0}, (sc_t){0, y}, false); \
+			y += 20
+		DRAW_TEXT("TURN %d", g_turn);
 		if (g_game_over)
 		{
-			draw_text("GAME OVER", (rgb_t){0, 0, 0}, (sc_t){0, 20}, false);
+			DRAW_TEXT("GAME OVER");
 		}
+		if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LCTRL])
+		{
+			DRAW_TEXT("HOLD RIGHT-CLICK: MOVE MAP");
+			DRAW_TEXT("LEFT-CLICK: SELECT TILE");
+			DRAW_TEXT("LEFT-CLICK ON WALKABLE TILE: WALK");
+			DRAW_TEXT("RIGHT-CLICK ON TOWERABLE TILE: PLACE TOWER");
+			DRAW_TEXT("LEFT-ALT: DISPLAY INFO");
+			DRAW_TEXT("LEFT-CONTROL: DISPLAY CONTROLS");
+			DRAW_TEXT("C KEY: CENTER VIEW ON CRYSTAL");
+			DRAW_TEXT("WHEEL: ZOOM (PIXEL PERFECT)");
+			DRAW_TEXT("WHEEL + LEFT-CONTROL: ZOOM (SLOW)");
+			DRAW_TEXT("WHEEL BUTTON / SPACE: END TURN");
+			DRAW_TEXT("ESCAPE: QUIT");
+		}
+		#undef DRAW_TEXT
 		
 		SDL_RenderPresent(g_renderer);
 	}
