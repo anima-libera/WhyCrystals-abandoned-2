@@ -224,7 +224,7 @@ struct sc_t
 typedef struct sc_t sc_t;
 
 int g_tile_side_pixels = 64;
-#define WINDOW_SIDE (800 - 800 % 64)
+int g_window_w = 800 - 800 % 64, g_window_h = 800 - 800 % 64;
 
 /* What are the screen coordinates of top left corner of the tile at (0, 0) ? */
 sc_t g_tc_sc_offset = {0};
@@ -640,7 +640,7 @@ bool tc_iter_all_cond(tc_iter_all_t* it)
 void draw_map(void)
 {
 	tc_t top_left_tc = sc_to_tc((sc_t){0, 0});
-	tc_t bottom_right_tc = sc_to_tc((sc_t){WINDOW_SIDE-1, WINDOW_SIDE-1});
+	tc_t bottom_right_tc = sc_to_tc((sc_t){g_window_w-1, g_window_h-1});
 	for (tc_iter_rect_t it = tc_iter_rect_init(tctc_to_rect(top_left_tc, bottom_right_tc));
 		tc_iter_rect_cond(&it); tc_iter_rect_next(&it))
 	{
@@ -1042,13 +1042,14 @@ void handle_mouse_wheel(int wheel_motion)
 			}
 		}
 		g_tile_side_pixels += wheel_motion * 16;
+		int const max_side = min(g_window_w, g_window_h) / 2;
 		if (g_tile_side_pixels < 16)
 		{
 			g_tile_side_pixels = 16;
 		}
-		else if (g_tile_side_pixels > WINDOW_SIDE / 2)
+		else if (g_tile_side_pixels > max_side)
 		{
-			g_tile_side_pixels = (WINDOW_SIDE / 2) - (WINDOW_SIDE / 2) % 16;
+			g_tile_side_pixels = max_side - max_side % 16;
 		}
 	}
 
@@ -1058,6 +1059,38 @@ void handle_mouse_wheel(int wheel_motion)
 		(float)(mouse.x - g_tc_sc_offset.x) / (float)g_tile_side_pixels;
 	float new_float_tc_y =
 		(float)(mouse.y - g_tc_sc_offset.y) / (float)g_tile_side_pixels;
+	g_tc_sc_offset_frac_x +=
+		(new_float_tc_x - old_float_tc_x) * (float)g_tile_side_pixels;
+	g_tc_sc_offset.x += floorf(g_tc_sc_offset_frac_x);
+	g_tc_sc_offset_frac_x -= floorf(g_tc_sc_offset_frac_x);
+	g_tc_sc_offset_frac_y +=
+		(new_float_tc_y - old_float_tc_y) * (float)g_tile_side_pixels;
+	g_tc_sc_offset.y += floorf(g_tc_sc_offset_frac_y);
+	g_tc_sc_offset_frac_y -= floorf(g_tc_sc_offset_frac_y);
+}
+
+void handle_window_resize(int new_w, int new_h)
+{
+	/* Save the precise position in the map (tc coordinate space) where the
+	 * center of the window (before resizing the window) is so that we can
+	 * move the map after resizing the window to put that position at the
+	 * center again (so that the resizing is more pleasing to the eye). */
+	sc_t old_center = {g_window_w / 2, g_window_h / 2};
+	float old_float_tc_x =
+		(float)(old_center.x - g_tc_sc_offset.x) / (float)g_tile_side_pixels;
+	float old_float_tc_y =
+		(float)(old_center.y - g_tc_sc_offset.y) / (float)g_tile_side_pixels;
+	
+	g_window_w = new_w;
+	g_window_h = new_h;
+
+	/* Moves the map to make sure that the precise point on the map at
+	 * the old center is still at the center after the resizing. */
+	sc_t new_center = {g_window_w / 2, g_window_h / 2};
+	float new_float_tc_x =
+		(float)(new_center.x - g_tc_sc_offset.x) / (float)g_tile_side_pixels;
+	float new_float_tc_y =
+		(float)(new_center.y - g_tc_sc_offset.y) / (float)g_tile_side_pixels;
 	g_tc_sc_offset_frac_x +=
 		(new_float_tc_x - old_float_tc_x) * (float)g_tile_side_pixels;
 	g_tc_sc_offset.x += floorf(g_tc_sc_offset_frac_x);
@@ -1603,8 +1636,8 @@ void game_perform(void)
 void center_view(tc_t tc)
 {
 	sc_t sc = tc_to_sc(tc);
-	g_tc_sc_offset.x -= sc.x + g_tile_side_pixels / 2 - WINDOW_SIDE / 2;
-	g_tc_sc_offset.y -= sc.y + g_tile_side_pixels / 2 - WINDOW_SIDE / 2;
+	g_tc_sc_offset.x -= sc.x + g_tile_side_pixels / 2 - g_window_w / 2;
+	g_tc_sc_offset.y -= sc.y + g_tile_side_pixels / 2 - g_window_h / 2;
 }
 
 int main(void)
@@ -1620,7 +1653,8 @@ int main(void)
 	}
 
 	g_window = SDL_CreateWindow("Why Crystals ?",
-		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_SIDE, WINDOW_SIDE, 0);
+		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, g_window_w, g_window_h,
+		SDL_WINDOW_RESIZABLE);
 	assert(g_window != NULL);
 
 	g_renderer = SDL_CreateRenderer(g_window, -1,
@@ -1679,6 +1713,17 @@ int main(void)
 						break;
 						case SDLK_c:
 							center_view(g_crystal_tc);
+						break;
+					}
+				break;
+				case SDL_WINDOWEVENT:
+					switch (event.window.event)
+					{
+						case SDL_WINDOWEVENT_LEAVE:
+							map_clear_hovered();
+						break;
+						case SDL_WINDOWEVENT_RESIZED:
+							handle_window_resize(event.window.data1, event.window.data2);
 						break;
 					}
 				break;
