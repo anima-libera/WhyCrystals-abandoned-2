@@ -1403,6 +1403,13 @@ void game_perform(void)
 	}
 }
 
+void center_view(tc_t tc)
+{
+	sc_t sc = tc_to_sc(tc);
+	g_tc_sc_offset.x -= sc.x + g_tile_side_pixels / 2 - WINDOW_SIDE / 2;
+	g_tc_sc_offset.y -= sc.y + g_tile_side_pixels / 2 - WINDOW_SIDE / 2;
+}
+
 int main(void)
 {
 	printf("Why Crystals ? version 0.0.1 indev\n");
@@ -1443,9 +1450,7 @@ int main(void)
 	
 	g_motion = (motion_t){0};
 	map_generate();
-	
-	g_tc_sc_offset.x = WINDOW_SIDE / 2;
-	g_tc_sc_offset.y = WINDOW_SIDE / 2;
+	center_view(g_crystal_tc);
 
 	g_tower_available = true;
 	g_turn = 0;
@@ -1471,12 +1476,14 @@ int main(void)
 						case SDLK_ESCAPE:
 							running = false;
 						break;
-						case SDLK_RETURN:
 						case SDLK_SPACE:
 							if (g_phase == PHASE_PLAYER)
 							{
 								start_enemy_phase();
 							}
+						break;
+						case SDLK_c:
+							center_view(g_crystal_tc);
 						break;
 					}
 				break;
