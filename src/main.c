@@ -282,6 +282,8 @@ enum obj_type_t
 	OBJ_TREE,
 	OBJ_CRYSTAL,
 	OBJ_UNIT_RED,
+	OBJ_UNIT_BLUE,
+	OBJ_UNIT_PINK,
 	OBJ_TOWER,
 	OBJ_TOWER_OFF,
 	OBJ_SHOT,
@@ -310,6 +312,8 @@ void draw_obj(obj_t const* obj, sc_t sc, int side)
 		case OBJ_TREE:      sprite = SPRITE_TREE;      break;
 		case OBJ_CRYSTAL:   sprite = SPRITE_CRYSTAL;   break;
 		case OBJ_UNIT_RED:  sprite = SPRITE_UNIT_RED;  break;
+		case OBJ_UNIT_BLUE: sprite = SPRITE_UNIT_BLUE; break;
+		case OBJ_UNIT_PINK: sprite = SPRITE_UNIT_PINK; break;
 		case OBJ_TOWER:     sprite = SPRITE_TOWER;     break;
 		case OBJ_TOWER_OFF: sprite = SPRITE_TOWER_OFF; break;
 		case OBJ_SHOT:      sprite = SPRITE_SHOT;      break;
@@ -446,9 +450,25 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 		rect.y += margin;
 		rect.w -= margin * 2;
 		rect.h -= margin * 2;
-		SDL_SetRenderDrawColor(g_renderer, 0, 100, 0, 255);
+		if (tile->options[OPTION_WALK] && tile->options[OPTION_TOWER])
+		{
+			SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
+		}
+		else if (tile->options[OPTION_WALK])
+		{
+			SDL_SetRenderDrawColor(g_renderer, 150, 100, 255, 255);
+		}
+		else if (tile->options[OPTION_TOWER])
+		{
+			SDL_SetRenderDrawColor(g_renderer, 255, 0, 0, 255);
+		}
+		else
+		{
+			assert(false);
+		}
 		SDL_RenderDrawRect(g_renderer, &rect);
 
+		/* Draw the little option symbols. */
 		if (tile->is_hovered || SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT])
 		{
 			rect.w = 16;
@@ -682,9 +702,9 @@ void map_generate(void)
 	tc = g_crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) += 1;
 	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_RED};
 	tc = g_crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) -= 1;
-	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_RED};
+	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_BLUE};
 	tc = g_crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) += rand() % 2 ? 2 : -2;
-	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_RED};
+	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_PINK};
 
 	/* Also place a tower near the crystal. */
 	tc = g_crystal_tc; tc.x += rand() % 2 ? 1 : -1; tc.y += rand() % 2 ? 1 : -1;
@@ -820,30 +840,71 @@ int g_phase_time;
 /* Has the player lost the game? */
 bool g_game_over;
 
-bool does_path_exist(tc_t a, tc_t b, int max_length)
+struct path_internal_t
 {
-	if (tc_eq(a, b))
+	bool exists;
+	tc_t next_tc;
+	int length;
+};
+typedef struct path_internal_t path_internal_t;
+
+path_internal_t path_internal(tc_t src, tc_t dst, int max_length)
+{
+	if (tc_eq(src, dst))
 	{
-		return true;
+		return (path_internal_t){
+			.exists = true,
+			.length = 0};
 	}
 	else if (max_length <= 0)
 	{
-		return false;
+		return (path_internal_t){.exists = false};
 	}
 	else
 	{
-		tc_t neighbors_a[4] = {{a.x-1, a.y}, {a.x, a.y-1}, {a.x+1, a.y}, {a.x, a.y+1}};
+		tc_t src_neighbors[4] = {
+			{src.x-1, src.y},
+			{src.x, src.y-1},
+			{src.x+1, src.y},
+			{src.x, src.y+1}};
 		for (int i = 0; i < 4; i++)
 		{
-			if (map_tile(neighbors_a[i])->obj.type == OBJ_NONE)
+			if (map_tile(src_neighbors[i])->obj.type == OBJ_NONE)
 			{
-				if (does_path_exist(neighbors_a[i], b, max_length - 1))
+				path_internal_t rec = path_internal(src_neighbors[i], dst, max_length - 1);
+				if (rec.exists)
 				{
-					return true;
+					return (path_internal_t){
+						.exists = true,
+						.next_tc = rec.next_tc,
+						.length = rec.length + 1};
 				}
 			}
 		}
-		return false;
+		return (path_internal_t){.exists = false};
+	}
+}
+
+bool path_exists(tc_t src, tc_t dst, int max_length)
+{
+	return path_internal(src, dst, max_length).exists;
+}
+
+tc_t path_next_tc(tc_t src, tc_t dst, int max_length)
+{
+	return path_internal(src, dst, max_length).next_tc;
+}
+
+bool obj_type_is_unit(obj_type_t type)
+{
+	switch (type)
+	{
+		case OBJ_UNIT_RED:
+		case OBJ_UNIT_BLUE:
+		case OBJ_UNIT_PINK:
+			return true;
+		default:
+			return false;
 	}
 }
 
@@ -875,7 +936,6 @@ void handle_mouse_click(bool is_left_click)
 	if (new_selected->options[OPTION_WALK] && is_left_click)
 	{
 		/* A unit is moving. */
-		assert(old_selected->obj.type == OBJ_UNIT_RED);
 		g_motion.t = 0;
 		g_motion.t_max = 7;
 		g_motion.src = map_tile_tc(old_selected);
@@ -889,7 +949,6 @@ void handle_mouse_click(bool is_left_click)
 	else if (new_selected->options[OPTION_TOWER] && !is_left_click)
 	{
 		/* A unit is placing a tower. */
-		assert(old_selected->obj.type == OBJ_UNIT_RED);
 		g_motion.t = 0;
 		g_motion.t_max = 7;
 		g_motion.src = map_tile_tc(old_selected);
@@ -905,14 +964,25 @@ void handle_mouse_click(bool is_left_click)
 	{
 		map_clear_options();
 	}
-	if (new_selected->obj.type == OBJ_UNIT_RED &&
+	if (obj_type_is_unit(new_selected->obj.type) &&
 		new_selected->obj.can_still_act &&
 		is_left_click)
 	{
+		int walk_dist = 
+			new_selected->obj.type == OBJ_UNIT_RED ? 4 :
+			new_selected->obj.type == OBJ_UNIT_BLUE ? 3 :
+			new_selected->obj.type == OBJ_UNIT_PINK ? 2 :
+			(assert(false), 0);
+		int tower_dist =
+			new_selected->obj.type == OBJ_UNIT_RED ? 1 :
+			new_selected->obj.type == OBJ_UNIT_BLUE ? 2 :
+			new_selected->obj.type == OBJ_UNIT_PINK ? 3 :
+			(assert(false), 0);
 		/* A unit that can still act is selected, accessible tiles
 		 * have to be flagged as walkable. */
 		tc_t const selected_tc = map_tile_tc(new_selected);
-		for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect(selected_tc, 4));
+		int const radius = max(walk_dist, tower_dist);
+		for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect(selected_tc, radius));
 			tc_iter_rect_cond(&it); tc_iter_rect_next(&it))
 		{
 			if (tc_eq(selected_tc, it.tc))
@@ -920,9 +990,10 @@ void handle_mouse_click(bool is_left_click)
 				continue;
 			}
 			map_tile(it.tc)->options[OPTION_WALK] =
-				does_path_exist(selected_tc, it.tc, 4);
+				path_exists(selected_tc, it.tc, walk_dist);
 			map_tile(it.tc)->options[OPTION_TOWER] =
-				does_path_exist(selected_tc, it.tc, 2);
+				g_tower_available &&
+				path_exists(selected_tc, it.tc, tower_dist);
 		}
 	}
 }
@@ -1067,7 +1138,7 @@ bool game_play_enemy(void)
 				bool can_walk_on =
 					dst_tile->obj.type == OBJ_NONE ||
 					dst_tile->obj.type == OBJ_CRYSTAL ||
-					dst_tile->obj.type == OBJ_UNIT_RED ||
+					obj_type_is_unit(dst_tile->obj.type) ||
 					dst_tile->obj.type == OBJ_TOWER ||
 					dst_tile->obj.type == OBJ_TOWER_OFF ||
 					dst_tile->obj.type == OBJ_TREE;
@@ -1209,7 +1280,7 @@ bool game_play_enemy(void)
 				bool can_walk_on =
 					dst_tile->obj.type == OBJ_NONE ||
 					dst_tile->obj.type == OBJ_CRYSTAL ||
-					dst_tile->obj.type == OBJ_UNIT_RED ||
+					obj_type_is_unit(dst_tile->obj.type) ||
 					dst_tile->obj.type == OBJ_TOWER ||
 					dst_tile->obj.type == OBJ_TOWER_OFF ||
 					dst_tile->obj.type == OBJ_TREE;
@@ -1446,7 +1517,7 @@ void start_player_phase(void)
 		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
 		tile_t* tile = map_tile(it.tc);
-		if (tile->obj.type == OBJ_UNIT_RED)
+		if (obj_type_is_unit(tile->obj.type))
 		{
 			tile->obj.can_still_act = true;
 		}
