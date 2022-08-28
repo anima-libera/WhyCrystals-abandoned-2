@@ -85,8 +85,8 @@ rect_t tc_radius_to_rect(tc_t tc, int radius)
 	return (rect_t){
 		.x = tc.x - radius,
 		.y = tc.y - radius,
-		.w = radius * 2,
-		.h = radius * 2};
+		.w = radius * 2 + 1,
+		.h = radius * 2 + 1};
 }
 
 void tc_iter_rect_next(tc_iter_rect_t* it)
@@ -337,8 +337,18 @@ enum floor_type_t
 {
 	FLOOR_GRASSLAND,
 	FLOOR_DESERT,
+	FLOOR_WATER,
 };
 typedef enum floor_type_t floor_type_t;
+
+enum option_t
+{
+	OPTION_WALK,
+	OPTION_TOWER,
+
+	OPTION_NUMBER,
+};
+typedef enum option_t option_t;
 
 struct tile_t
 {
@@ -346,9 +356,29 @@ struct tile_t
 	obj_t obj;
 	bool is_hovered;
 	bool is_selected;
-	bool is_available;
+	bool options[OPTION_NUMBER];
 };
 typedef struct tile_t tile_t;
+
+bool tile_has_options(tile_t const* tile)
+{
+	for (int i = 0; i < OPTION_NUMBER; i++)
+	{
+		if (tile->options[i])
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void tile_clear_options(tile_t* tile)
+{
+	for (int i = 0; i < OPTION_NUMBER; i++)
+	{
+		tile->options[i] = false;
+	}
+}
 
 void draw_tile(tile_t const* tile, sc_t sc, int side)
 {
@@ -358,10 +388,22 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 	{
 		case FLOOR_GRASSLAND: sprite = SPRITE_GRASSLAND; break;
 		case FLOOR_DESERT:    sprite = SPRITE_DESERT;    break;
+		case FLOOR_WATER:     sprite = SPRITE_WATER;     break;
 		default: assert(false);
 	}
 	SDL_Rect rect = {.x = sc.x, .y = sc.y, .w = side, .h = side};
+	if (tile->floor == FLOOR_WATER)
+	{
+		rect.y += 3 * (g_tile_side_pixels / 16);
+	}
 	draw_sprite(sprite, &rect);
+
+	if (tile->floor != FLOOR_WATER)
+	{
+		rect.y += g_tile_side_pixels;
+		draw_sprite(SPRITE_SIDE_DIRT, &rect);
+		rect.y -= g_tile_side_pixels;
+	}
 
 	/* Apply a color filter on the tile sprite to make them be
 	 * less detailed because we see too much the details of these
@@ -376,6 +418,9 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 		case FLOOR_DESERT:
 			SDL_SetRenderDrawColor(g_renderer, 255, 255, 0, 110);
 		break;
+		default:
+			SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 0);
+		break;
 	}
 	SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
 	SDL_RenderFillRect(g_renderer, &rect);
@@ -388,13 +433,13 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 		SDL_RenderDrawRect(g_renderer, &rect);
 		//draw_sprite(SPRITE_SELECT, &rect);
 	}
-	else if (tile->is_hovered && !tile->is_available)
+	else if (tile->is_hovered && !tile_has_options(tile))
 	{
 		SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
 		SDL_RenderDrawRect(g_renderer, &rect);
 		//draw_sprite(SPRITE_HOVER, &rect);
 	}
-	if (tile->is_available)
+	if (tile_has_options(tile))
 	{
 		int const margin = tile->is_hovered ? 3 : 5;
 		rect.x += margin;
@@ -403,6 +448,26 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 		rect.h -= margin * 2;
 		SDL_SetRenderDrawColor(g_renderer, 0, 100, 0, 255);
 		SDL_RenderDrawRect(g_renderer, &rect);
+
+		if (tile->is_hovered || SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT])
+		{
+			rect.w = 16;
+			rect.h = 16;
+			for (int i = 0; i < OPTION_NUMBER; i++)
+			{
+				if (tile->options[i])
+				{
+					switch (i)
+					{
+						case OPTION_WALK:  sprite = SPRITE_WALK;  break;
+						case OPTION_TOWER: sprite = SPRITE_TOWER; break;
+						default: assert(false);
+					}
+					draw_sprite(sprite, &rect);
+					rect.x += 17;
+				}
+			}
+		}
 	}
 
 	/* Draw the object that is on the tile. */
@@ -589,17 +654,20 @@ void map_generate(void)
 		}
 
 		tile->obj = (obj_t){0};
-		if (rand() % 21 == 1)
+		if (tile->floor != FLOOR_WATER)
 		{
-			tile->obj.type = OBJ_ENEMY_FLY;
-		}
-		else if (rand() % 13 == 3)
-		{
-			tile->obj.type = OBJ_ROCK;
-		}
-		else if (rand() % 13 == 3)
-		{
-			tile->obj.type = OBJ_TREE;
+			if (rand() % 21 == 1)
+			{
+				tile->obj.type = OBJ_ENEMY_FLY;
+			}
+			else if (rand() % 13 == 3)
+			{
+				tile->obj.type = OBJ_ROCK;
+			}
+			else if (rand() % 13 == 3)
+			{
+				tile->obj.type = OBJ_TREE;
+			}
 		}
 	}
 
@@ -635,12 +703,12 @@ void map_generate(void)
 	}
 }
 
-void map_clear_available(void)
+void map_clear_options(void)
 {
 	for (tc_iter_all_t it = tc_iter_all_init();
 		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
-		map_tile(it.tc)->is_available = false;
+		tile_clear_options(map_tile(it.tc));
 	}
 }
 
@@ -777,50 +845,57 @@ void handle_mouse_click(bool is_left_click)
 		return;
 	}
 
-	if (new_selected->is_available)
+	if (new_selected->options[OPTION_WALK] && is_left_click)
 	{
-		/* A unit is moving or placing a tower. */
+		/* A unit is moving. */
 		assert(old_selected->obj.type == OBJ_UNIT_RED);
 		g_motion.t = 0;
 		g_motion.t_max = 7;
 		g_motion.src = map_tile_tc(old_selected);
 		g_motion.dst = map_tile_tc(new_selected);
-		if (is_left_click)
-		{
-			/* Moving. */
-			g_motion.obj = old_selected->obj;
-			g_motion.obj.can_still_act = false;
-			old_selected->obj = (obj_t){0};
-		}
-		else if (g_tower_available)
-		{
-			/* Placing a tower. */
-			g_motion.obj = (obj_t){.type = OBJ_TOWER, .ammo = 4};
-			g_tower_available = false;
-			old_selected->obj.can_still_act = false;
-		}
-		map_clear_available();
+		g_motion.obj = old_selected->obj;
+		g_motion.obj.can_still_act = false;
+		old_selected->obj = (obj_t){0};
+		map_clear_options();
 		return;
 	}
+	else if (new_selected->options[OPTION_TOWER] && !is_left_click)
+	{
+		/* A unit is placing a tower. */
+		assert(old_selected->obj.type == OBJ_UNIT_RED);
+		g_motion.t = 0;
+		g_motion.t_max = 7;
+		g_motion.src = map_tile_tc(old_selected);
+		g_motion.dst = map_tile_tc(new_selected);
+		g_motion.obj = (obj_t){.type = OBJ_TOWER, .ammo = 4};
+		g_tower_available = false;
+		old_selected->obj.can_still_act = false;
+		map_clear_options();
+		return;
+	}
+
 	if (is_left_click)
 	{
-		map_clear_available();
+		map_clear_options();
 	}
 	if (new_selected->obj.type == OBJ_UNIT_RED &&
 		new_selected->obj.can_still_act &&
 		is_left_click)
 	{
 		/* A unit that can still act is selected, accessible tiles
-		 * have to be flagged as available for action. */
+		 * have to be flagged as walkable. */
 		tc_t const selected_tc = map_tile_tc(new_selected);
 		for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect(selected_tc, 2));
 			tc_iter_rect_cond(&it); tc_iter_rect_next(&it))
 		{
 			int const dist = abs(it.tc.x - selected_tc.x) + abs(it.tc.y - selected_tc.y);
-			bool is_accessible =
+			map_tile(it.tc)->options[OPTION_WALK] =
 				dist != 0 && dist <= 2 &&
 				map_tile(it.tc)->obj.type == OBJ_NONE;
-			map_tile(it.tc)->is_available = is_accessible;
+			map_tile(it.tc)->options[OPTION_TOWER] =
+				g_tower_available &&
+				dist != 0 && dist <= 1 &&
+				map_tile(it.tc)->obj.type == OBJ_NONE;
 		}
 	}
 }
@@ -1290,7 +1365,7 @@ void start_enemy_phase(void)
 {
 	g_phase = PHASE_ENEMY;
 	g_phase_time = 0;
-	map_clear_available();
+	map_clear_options();
 	map_clear_selected();
 	map_clear_can_still_act();
 
@@ -1311,7 +1386,7 @@ void start_tower_phase(void)
 {
 	g_phase = PHASE_TOWERS;
 	g_phase_time = 0;
-	map_clear_available();
+	map_clear_options();
 	map_clear_selected();
 	map_clear_can_still_act();
 
@@ -1452,11 +1527,8 @@ int main(void)
 	map_generate();
 	center_view(g_crystal_tc);
 
-	g_tower_available = true;
 	g_turn = 0;
-	g_phase_time = 0;
 	g_game_over = false;
-
 	start_player_phase();
 
 	bool running = true;

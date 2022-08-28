@@ -11,13 +11,16 @@ static SDL_Rect s_sprite_rect_table[] = {
 	#define XY16(x_, y_) .x = x_ * 16, .y = y_ * 16
 	#define WH16 .w = 16, .h = 16
 	[SPRITE_ROCK] =      {XY16(0, 0), WH16},
-	[SPRITE_TREE] =      {XY16(0, 6), WH16},
+	[SPRITE_TREE] =      {XY16(1, 6), WH16},
 	[SPRITE_CRYSTAL] =   {XY16(0, 7), WH16},
 	[SPRITE_GRASSLAND] = {XY16(0, 8), WH16},
 	[SPRITE_DESERT] =    {XY16(1, 8), WH16},
+	[SPRITE_SIDE_DIRT] = {XY16(2, 8), WH16},
+	[SPRITE_WATER] =     {XY16(3, 8), WH16},
 	[SPRITE_UNIT_RED] =  {XY16(0, 1), WH16},
 	[SPRITE_UNIT_BLUE] = {XY16(1, 1), WH16},
 	[SPRITE_UNIT_PINK] = {XY16(2, 1), WH16},
+	[SPRITE_WALK] =      {XY16(2, 4), WH16},
 	[SPRITE_TOWER] =     {XY16(0, 4), WH16},
 	[SPRITE_TOWER_OFF] = {XY16(1, 4), WH16},
 	[SPRITE_SHOT] =      {XY16(0, 5), WH16},
