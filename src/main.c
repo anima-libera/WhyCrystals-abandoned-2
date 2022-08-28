@@ -409,7 +409,8 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 	draw_obj(&tile->obj, sc, side);
 
 	/* Draw the tower ammo count. */
-	if ((tile->is_selected || tile->is_hovered) && tile->obj.type == OBJ_TOWER)
+	if (tile->obj.type == OBJ_TOWER &&
+		(tile->is_selected || tile->is_hovered || SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT]))
 	{
 		char string[20];
 		sprintf(string, "%d", tile->obj.ammo);
