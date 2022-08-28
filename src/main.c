@@ -820,6 +820,33 @@ int g_phase_time;
 /* Has the player lost the game? */
 bool g_game_over;
 
+bool does_path_exist(tc_t a, tc_t b, int max_length)
+{
+	if (tc_eq(a, b))
+	{
+		return true;
+	}
+	else if (max_length <= 0)
+	{
+		return false;
+	}
+	else
+	{
+		tc_t neighbors_a[4] = {{a.x-1, a.y}, {a.x, a.y-1}, {a.x+1, a.y}, {a.x, a.y+1}};
+		for (int i = 0; i < 4; i++)
+		{
+			if (map_tile(neighbors_a[i])->obj.type == OBJ_NONE)
+			{
+				if (does_path_exist(neighbors_a[i], b, max_length - 1))
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+}
+
 void handle_mouse_click(bool is_left_click)
 {
 	tile_t* old_selected = map_selected_tile();
@@ -885,17 +912,17 @@ void handle_mouse_click(bool is_left_click)
 		/* A unit that can still act is selected, accessible tiles
 		 * have to be flagged as walkable. */
 		tc_t const selected_tc = map_tile_tc(new_selected);
-		for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect(selected_tc, 2));
+		for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect(selected_tc, 4));
 			tc_iter_rect_cond(&it); tc_iter_rect_next(&it))
 		{
-			int const dist = abs(it.tc.x - selected_tc.x) + abs(it.tc.y - selected_tc.y);
+			if (tc_eq(selected_tc, it.tc))
+			{
+				continue;
+			}
 			map_tile(it.tc)->options[OPTION_WALK] =
-				dist != 0 && dist <= 2 &&
-				map_tile(it.tc)->obj.type == OBJ_NONE;
+				does_path_exist(selected_tc, it.tc, 4);
 			map_tile(it.tc)->options[OPTION_TOWER] =
-				g_tower_available &&
-				dist != 0 && dist <= 1 &&
-				map_tile(it.tc)->obj.type == OBJ_NONE;
+				does_path_exist(selected_tc, it.tc, 2);
 		}
 	}
 }
