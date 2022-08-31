@@ -1173,7 +1173,7 @@ bool tile_is_walkable_by_fly(tile_t* tile)
 		tile->obj.type == OBJ_TREE;
 }
 
-tc_t compute_fly_move(tc_t fly_tc, bool allow_recursion)
+tc_t compute_fly_move(tc_t fly_tc, int recursion_budget, bool allow_random)
 {
 	/* List walkable neighbors. */
 	tc_t neighbor_tcs[4] = {
@@ -1193,24 +1193,27 @@ tc_t compute_fly_move(tc_t fly_tc, bool allow_recursion)
 		}
 	}
 
-	for (int i = 0; i < walkable_neighbor_count; i++)
-	{
-		int new_dist = tc_dist(walkable_neighbor_tcs[i], g_crystal_tc);
-		if (new_dist < tc_dist(fly_tc, g_crystal_tc))
-		{
-			return walkable_neighbor_tcs[i];
-		}
-	}
-	if (allow_recursion)
+	if (allow_random ? rand() % 20 != 0 : true)
 	{
 		for (int i = 0; i < walkable_neighbor_count; i++)
 		{
-			tc_t next_next_tc = compute_fly_move(compute_fly_move(
-				walkable_neighbor_tcs[i], false), false);
-			int next_next_new_dist = tc_dist(next_next_tc, g_crystal_tc);
-			if (next_next_new_dist < tc_dist(fly_tc, g_crystal_tc))
+			int new_dist = tc_dist(walkable_neighbor_tcs[i], g_crystal_tc);
+			if (new_dist < tc_dist(fly_tc, g_crystal_tc))
 			{
 				return walkable_neighbor_tcs[i];
+			}
+		}
+		if (recursion_budget >= 1)
+		{
+			for (int i = 0; i < walkable_neighbor_count; i++)
+			{
+				tc_t next_next_tc = compute_fly_move(compute_fly_move(walkable_neighbor_tcs[i],
+					recursion_budget-1, false), recursion_budget-1, false);
+				int next_next_new_dist = tc_dist(next_next_tc, g_crystal_tc);
+				if (next_next_new_dist < tc_dist(fly_tc, g_crystal_tc))
+				{
+					return walkable_neighbor_tcs[i];
+				}
 			}
 		}
 	}
@@ -1249,7 +1252,7 @@ bool game_play_enemy(void)
 				 * which is to be decided. */
 				bool lay_egg = rand() % 11 == 0;
 				
-				tc_t dst_tc = compute_fly_move(src_tc, true);
+				tc_t dst_tc = compute_fly_move(src_tc, 2, true);
 
 				if (!tc_in_map(dst_tc) || tc_eq(src_tc, dst_tc))
 				{
