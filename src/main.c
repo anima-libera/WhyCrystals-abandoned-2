@@ -364,6 +364,17 @@ struct tile_t
 };
 typedef struct tile_t tile_t;
 
+void tile_init(tile_t* tile)
+{
+	*tile = (tile_t){0};
+	tile->floor = FLOOR_GRASSLAND;
+	tile->obj = (obj_t){.type = OBJ_NONE};
+	if (rand() % 3 == 0)
+	{
+		tile->obj.type = OBJ_TREE;
+	}
+}
+
 bool tile_has_options(tile_t const* tile)
 {
 	for (int i = 0; i < OPTION_NUMBER; i++)
@@ -580,11 +591,7 @@ tile_t* map_tile(tc_t tc)
 	chunk->tiles = calloc(CHUNK_SIDE * CHUNK_SIDE, sizeof(tile_t));
 	for (int i = 0; i < CHUNK_SIDE * CHUNK_SIDE; i++)
 	{
-		chunk->tiles[i].floor = FLOOR_GRASSLAND;
-		if (rand() % 3 == 0)
-		{
-			chunk->tiles[i].obj = (obj_t){.type = OBJ_TREE};
-		}
+		tile_init(&chunk->tiles[i]);
 	}
 	int inchunk_x = tc.x - chunk->top_left_tc.x;
 	int inchunk_y = tc.y - chunk->top_left_tc.y;
@@ -1155,6 +1162,68 @@ void spawn_one_enemy(obj_type_t type)
 	g_enemy_already_spawn_count++;
 }
 
+bool tile_is_walkable_by_fly(tile_t* tile)
+{
+	return
+		tile->obj.type == OBJ_NONE ||
+		tile->obj.type == OBJ_CRYSTAL ||
+		obj_type_is_unit(tile->obj.type) ||
+		tile->obj.type == OBJ_TOWER ||
+		tile->obj.type == OBJ_TOWER_OFF ||
+		tile->obj.type == OBJ_TREE;
+}
+
+tc_t compute_fly_move(tc_t fly_tc, bool allow_recursion)
+{
+	/* List walkable neighbors. */
+	tc_t neighbor_tcs[4] = {
+		{fly_tc.x-1, fly_tc.y},
+		{fly_tc.x, fly_tc.y-1},
+		{fly_tc.x+1, fly_tc.y},
+		{fly_tc.x, fly_tc.y+1}};
+	tc_t walkable_neighbor_tcs[4];
+	int walkable_neighbor_count = 0;
+	bool reverse = rand() % 2 == 0; /* Reverse the order of the tiles ? */
+	for (int i = 0; i < 4; i++)
+	{
+		int index = reverse ? 3 - i : i;
+		if (tile_is_walkable_by_fly(map_tile(neighbor_tcs[index])))
+		{
+			walkable_neighbor_tcs[walkable_neighbor_count++] = neighbor_tcs[index];
+		}
+	}
+
+	for (int i = 0; i < walkable_neighbor_count; i++)
+	{
+		int new_dist = tc_dist(walkable_neighbor_tcs[i], g_crystal_tc);
+		if (new_dist < tc_dist(fly_tc, g_crystal_tc))
+		{
+			return walkable_neighbor_tcs[i];
+		}
+	}
+	if (allow_recursion)
+	{
+		for (int i = 0; i < walkable_neighbor_count; i++)
+		{
+			tc_t next_next_tc = compute_fly_move(compute_fly_move(
+				walkable_neighbor_tcs[i], false), false);
+			int next_next_new_dist = tc_dist(next_next_tc, g_crystal_tc);
+			if (next_next_new_dist < tc_dist(fly_tc, g_crystal_tc))
+			{
+				return walkable_neighbor_tcs[i];
+			}
+		}
+	}
+	if (walkable_neighbor_count > 0)
+	{
+		return walkable_neighbor_tcs[rand() % walkable_neighbor_count];
+	}
+	else
+	{
+		return fly_tc;
+	}
+}
+
 bool game_play_enemy(void)
 {
 	for (tc_iter_all_spiral_t it = tc_iter_all_spiral_init(g_crystal_tc);
@@ -1178,42 +1247,9 @@ bool game_play_enemy(void)
 			{
 				/* A fly can move or lay an egg to an adjacent tile,
 				 * which is to be decided. */
-				tc_t dst_tc = src_tc;
-
-				if ((rand() >> 5) % 6 == 0)
-				{
-					/* The destination can be random. */
-					if ((rand() >> 5) % 2)
-					{
-						dst_tc.x += rand() % 2 ? 1 : -1;
-					}
-					else
-					{
-						dst_tc.y += rand() % 2 ? 1 : -1;
-					}
-				}
-				else
-				{
-					/* Does the dst tile is differect from the current fly tile along the X axis?
-					 * This is random choice, except when one option does not make sense. */
-					bool axis_x = rand() % 2 == 0;
-					if (src_tc.y == g_crystal_tc.y)
-					{
-						axis_x = true;
-					}
-					else if (src_tc.x == g_crystal_tc.x)
-					{
-						axis_x = false;
-					}
-					if (axis_x)
-					{
-						dst_tc.x += src_tc.x < g_crystal_tc.x ? 1 : -1;
-					}
-					else
-					{
-						dst_tc.y += src_tc.y < g_crystal_tc.y ? 1 : -1;
-					}
-				}
+				bool lay_egg = rand() % 11 == 0;
+				
+				tc_t dst_tc = compute_fly_move(src_tc, true);
 
 				if (!tc_in_map(dst_tc) || tc_eq(src_tc, dst_tc))
 				{
@@ -1234,8 +1270,6 @@ bool game_play_enemy(void)
 					src_tile->obj.can_still_act = false;
 					return false;
 				}
-
-				bool lay_egg = rand() % 11 == 0;
 
 				g_motion.t = 0;
 				g_motion.t_max = 6;

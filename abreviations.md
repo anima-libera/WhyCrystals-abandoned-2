@@ -2,6 +2,7 @@
 Abreviation | Meaning
 ----------- | -------
 `da`        | dynamic array
+`eq`        | equal
 `sc`        | screen coordinates
 `tc`        | tile coordinates
 `cap`       | capacity
@@ -13,3 +14,4 @@ Abreviation | Meaning
 `src`       | source
 `elem`      | element
 `expr`      | expression
+`wdtc`      | walking distance to crystal
