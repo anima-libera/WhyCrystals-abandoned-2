@@ -387,11 +387,58 @@ bool tile_has_options(tile_t const* tile)
 	return false;
 }
 
+int tile_count_options(tile_t const* tile)
+{
+	int count = 0;
+	for (int i = 0; i < OPTION_NUMBER; i++)
+	{
+		if (tile->options[i])
+		{
+			count++;
+		}
+	}
+	return count;
+}
+
 void tile_clear_options(tile_t* tile)
 {
 	for (int i = 0; i < OPTION_NUMBER; i++)
 	{
 		tile->options[i] = false;
+	}
+}
+
+/* The cool modulo operator, the one that gives 7 for -3 mod 10. */
+int cool_mod(int a, int b)
+{
+	assert(b > 0);
+	if (a >= 0)
+	{
+		return a % b;
+	}
+	else
+	{
+		return (b - ((-a) % b)) % b;
+	}
+}
+
+int g_selected_option_index;
+
+option_t tile_selected_option(tile_t const* tile)
+{
+	int option_index = 0;
+	int const selected_option_index =
+		cool_mod(g_selected_option_index, tile_count_options(tile));
+	for (int i = 0; i < OPTION_NUMBER; i++)
+	{
+		if (tile->options[i])
+		{
+			if (option_index == selected_option_index)
+			{
+				return i;
+			}
+			option_index++;
+		}
 	}
 }
 
@@ -480,8 +527,14 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 		SDL_RenderDrawRect(g_renderer, &rect);
 
 		/* Draw the little option symbols. */
-		if (tile->is_hovered || SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT])
+		if (tile_has_options(tile) &&
+			(tile->is_hovered || SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT]))
 		{
+			int option_index = 0;
+			int const selected_option_index =
+				cool_mod(g_selected_option_index, tile_count_options(tile));
+			rect.x += 2;
+			rect.y += 2;
 			rect.w = 16;
 			rect.h = 16;
 			for (int i = 0; i < OPTION_NUMBER; i++)
@@ -495,7 +548,15 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 						default: assert(false);
 					}
 					draw_sprite(sprite, &rect);
-					rect.x += 17;
+
+					if (tile->is_hovered && option_index == selected_option_index)
+					{
+						SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
+						SDL_RenderDrawRect(g_renderer, &rect);
+					}
+
+					rect.x += 16 + 2;
+					option_index++;
 				}
 			}
 		}
@@ -539,20 +600,6 @@ typedef struct chunk_t chunk_t;
  * is no need to worry about the validity of pointers to tiles). */
 int g_chunk_da_len = 0, g_chunk_da_cap = 0;
 chunk_t* g_chunk_da = NULL;
-
-/* The cool modulo operator, the one that gives 7 for -3 mod 10. */
-int cool_mod(int a, int b)
-{
-	assert(b > 0);
-	if (a >= 0)
-	{
-		return a % b;
-	}
-	else
-	{
-		return (b - ((-a) % b)) % b;
-	}
-}
 
 bool tc_in_map(tc_t tc)
 {
@@ -940,31 +987,34 @@ void handle_mouse_click(bool is_left_click)
 		return;
 	}
 
-	if (new_selected->options[OPTION_WALK] && is_left_click)
+	if (is_left_click && tile_has_options(new_selected))
 	{
-		/* A unit is moving. */
-		g_motion.t = 0;
-		g_motion.t_max = 7;
-		g_motion.src = map_tile_tc(old_selected);
-		g_motion.dst = map_tile_tc(new_selected);
-		g_motion.obj = old_selected->obj;
-		g_motion.obj.can_still_act = false;
-		old_selected->obj = (obj_t){0};
-		map_clear_options();
-		return;
-	}
-	else if (new_selected->options[OPTION_TOWER] && !is_left_click)
-	{
-		/* A unit is placing a tower. */
-		g_motion.t = 0;
-		g_motion.t_max = 7;
-		g_motion.src = map_tile_tc(old_selected);
-		g_motion.dst = map_tile_tc(new_selected);
-		g_motion.obj = (obj_t){.type = OBJ_TOWER, .ammo = 4};
-		g_tower_available = false;
-		old_selected->obj.can_still_act = false;
-		map_clear_options();
-		return;
+		switch (tile_selected_option(new_selected))
+		{
+			case OPTION_WALK:
+				g_motion.t = 0;
+				g_motion.t_max = 7;
+				g_motion.src = map_tile_tc(old_selected);
+				g_motion.dst = map_tile_tc(new_selected);
+				g_motion.obj = old_selected->obj;
+				g_motion.obj.can_still_act = false;
+				old_selected->obj = (obj_t){0};
+				map_clear_options();
+			break;
+			case OPTION_TOWER:
+				g_motion.t = 0;
+				g_motion.t_max = 7;
+				g_motion.src = map_tile_tc(old_selected);
+				g_motion.dst = map_tile_tc(new_selected);
+				g_motion.obj = (obj_t){.type = OBJ_TOWER, .ammo = 4};
+				g_tower_available = false;
+				old_selected->obj.can_still_act = false;
+				map_clear_options();
+			break;
+			default:
+				assert(false);
+			break;
+		}
 	}
 
 	if (is_left_click)
@@ -975,6 +1025,7 @@ void handle_mouse_click(bool is_left_click)
 		new_selected->obj.can_still_act &&
 		is_left_click)
 	{
+		g_selected_option_index = 0;
 		int walk_dist = 
 			new_selected->obj.type == OBJ_UNIT_RED ? 4 :
 			new_selected->obj.type == OBJ_UNIT_BLUE ? 3 :
@@ -1007,6 +1058,16 @@ void handle_mouse_click(bool is_left_click)
 
 void handle_mouse_wheel(int wheel_motion)
 {
+	/* The wheel is usually to zoom, but may be used to select an option
+	 * on available tiles. */
+	if (tile_has_options(map_hovered_tile()))
+	{
+		g_selected_option_index += wheel_motion;
+		return;
+	}
+
+	/* Zoom it is. */
+
 	/* Save the precise position in the map (tc coordinate space)
 	 * where the mouse is pointing (before zooming) so that we can
 	 * move the map after zooming to put that position under the
