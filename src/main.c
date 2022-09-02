@@ -284,9 +284,12 @@ enum obj_type_t
 	OBJ_UNIT_RED,
 	OBJ_UNIT_BLUE,
 	OBJ_UNIT_PINK,
-	OBJ_TOWER,
+	OBJ_TOWER_YELLOW,
+	OBJ_TOWER_BLUE,
 	OBJ_TOWER_OFF,
-	OBJ_SHOT,
+	OBJ_SHOT_BLUE,
+	OBJ_SHOT_RED,
+	OBJ_BLOB_RED,
 	OBJ_ENEMY_EGG,
 	OBJ_ENEMY_FLY,
 	OBJ_ENEMY_BIG,
@@ -307,19 +310,22 @@ void draw_obj(obj_t const* obj, sc_t sc, int side)
 	sprite_t sprite;
 	switch (obj->type)
 	{
-		case OBJ_NONE:      return;
-		case OBJ_ROCK:      sprite = SPRITE_ROCK;      break;
-		case OBJ_TREE:      sprite = SPRITE_TREE;      break;
-		case OBJ_CRYSTAL:   sprite = SPRITE_CRYSTAL;   break;
-		case OBJ_UNIT_RED:  sprite = SPRITE_UNIT_RED;  break;
-		case OBJ_UNIT_BLUE: sprite = SPRITE_UNIT_BLUE; break;
-		case OBJ_UNIT_PINK: sprite = SPRITE_UNIT_PINK; break;
-		case OBJ_TOWER:     sprite = SPRITE_TOWER;     break;
-		case OBJ_TOWER_OFF: sprite = SPRITE_TOWER_OFF; break;
-		case OBJ_SHOT:      sprite = SPRITE_SHOT;      break;
-		case OBJ_ENEMY_EGG: sprite = SPRITE_ENEMY_EGG; break;
-		case OBJ_ENEMY_FLY: sprite = SPRITE_ENEMY_FLY; break;
-		case OBJ_ENEMY_BIG: sprite = SPRITE_ENEMY_BIG; break;
+		case OBJ_NONE:         return;
+		case OBJ_ROCK:         sprite = SPRITE_ROCK;         break;
+		case OBJ_TREE:         sprite = SPRITE_TREE;         break;
+		case OBJ_CRYSTAL:      sprite = SPRITE_CRYSTAL;      break;
+		case OBJ_UNIT_RED:     sprite = SPRITE_UNIT_RED;     break;
+		case OBJ_UNIT_BLUE:    sprite = SPRITE_UNIT_BLUE;    break;
+		case OBJ_UNIT_PINK:    sprite = SPRITE_UNIT_PINK;    break;
+		case OBJ_TOWER_YELLOW: sprite = SPRITE_TOWER_YELLOW; break;
+		case OBJ_TOWER_BLUE:   sprite = SPRITE_TOWER_BLUE;   break;
+		case OBJ_TOWER_OFF:    sprite = SPRITE_TOWER_OFF;    break;
+		case OBJ_SHOT_BLUE:    sprite = SPRITE_SHOT_BLUE;    break;
+		case OBJ_SHOT_RED:     sprite = SPRITE_SHOT_RED;     break;
+		case OBJ_BLOB_RED:     sprite = SPRITE_BLOB_RED;     break;
+		case OBJ_ENEMY_EGG:    sprite = SPRITE_ENEMY_EGG;    break;
+		case OBJ_ENEMY_FLY:    sprite = SPRITE_ENEMY_FLY;    break;
+		case OBJ_ENEMY_BIG:    sprite = SPRITE_ENEMY_BIG;    break;
 		default: assert(false);
 	}
 	SDL_Rect rect = {.x = sc.x, .y = sc.y, .w = side, .h = side};
@@ -348,11 +354,24 @@ typedef enum floor_type_t floor_type_t;
 enum option_t
 {
 	OPTION_WALK,
-	OPTION_TOWER,
+	OPTION_TOWER_YELLOW,
+	OPTION_TOWER_BLUE,
 
 	OPTION_NUMBER,
 };
 typedef enum option_t option_t;
+
+bool option_is_tower(option_t option)
+{
+	switch (option)
+	{
+		case OPTION_TOWER_YELLOW:
+		case OPTION_TOWER_BLUE:
+			return true;
+		default:
+			return false;
+	}
+}
 
 struct tile_t
 {
@@ -380,6 +399,18 @@ bool tile_has_options(tile_t const* tile)
 	for (int i = 0; i < OPTION_NUMBER; i++)
 	{
 		if (tile->options[i])
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool tile_has_tower_options(tile_t const* tile)
+{
+	for (int i = 0; i < OPTION_NUMBER; i++)
+	{
+		if (option_is_tower(i) && tile->options[i])
 		{
 			return true;
 		}
@@ -440,6 +471,7 @@ option_t tile_selected_option(tile_t const* tile)
 			option_index++;
 		}
 	}
+	assert(false);
 }
 
 void draw_tile(tile_t const* tile, sc_t sc, int side)
@@ -508,7 +540,7 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 		rect.y += margin;
 		rect.w -= margin * 2;
 		rect.h -= margin * 2;
-		if (tile->options[OPTION_WALK] && tile->options[OPTION_TOWER])
+		if (tile->options[OPTION_WALK] && tile_has_tower_options(tile))
 		{
 			SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
 		}
@@ -516,12 +548,13 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 		{
 			SDL_SetRenderDrawColor(g_renderer, 150, 100, 255, 255);
 		}
-		else if (tile->options[OPTION_TOWER])
+		else if (tile_has_tower_options(tile))
 		{
 			SDL_SetRenderDrawColor(g_renderer, 255, 0, 0, 255);
 		}
 		else
 		{
+			/* h ? */
 			assert(false);
 		}
 		SDL_RenderDrawRect(g_renderer, &rect);
@@ -543,8 +576,9 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 				{
 					switch (i)
 					{
-						case OPTION_WALK:  sprite = SPRITE_WALK;  break;
-						case OPTION_TOWER: sprite = SPRITE_TOWER; break;
+						case OPTION_WALK:         sprite = SPRITE_WALK;         break;
+						case OPTION_TOWER_YELLOW: sprite = SPRITE_TOWER_YELLOW; break;
+						case OPTION_TOWER_BLUE:   sprite = SPRITE_TOWER_BLUE;   break;
 						default: assert(false);
 					}
 					draw_sprite(sprite, &rect);
@@ -555,7 +589,7 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 						SDL_RenderDrawRect(g_renderer, &rect);
 					}
 
-					rect.x += 16 + 2;
+					rect.y += 16 + 2;
 					option_index++;
 				}
 			}
@@ -566,7 +600,7 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 	draw_obj(&tile->obj, sc, side);
 
 	/* Draw the tower ammo count. */
-	if (tile->obj.type == OBJ_TOWER &&
+	if ((tile->obj.type == OBJ_TOWER_YELLOW || tile->obj.type == OBJ_TOWER_BLUE) &&
 		(tile->is_selected || tile->is_hovered || SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT]))
 	{
 		char string[20];
@@ -762,7 +796,9 @@ void map_generate(void)
 
 	/* Also place a tower near the crystal. */
 	tc = g_crystal_tc; tc.x += rand() % 2 ? 1 : -1; tc.y += rand() % 2 ? 1 : -1;
-	map_tile(tc)->obj = (obj_t){.type = OBJ_TOWER, .ammo = 2};
+	map_tile(tc)->obj = (obj_t){
+		.type = rand() % 2 == 0 ? OBJ_TOWER_YELLOW : OBJ_TOWER_BLUE,
+		.ammo = 2 + rand() % 2};
 
 	/* Making sure that enemies close to the crystal are eggs so that the player
 	 * has some time to take action against them. */
@@ -1001,12 +1037,22 @@ void handle_mouse_click(bool is_left_click)
 				old_selected->obj = (obj_t){0};
 				map_clear_options();
 			break;
-			case OPTION_TOWER:
+			case OPTION_TOWER_YELLOW:
 				g_motion.t = 0;
 				g_motion.t_max = 7;
 				g_motion.src = map_tile_tc(old_selected);
 				g_motion.dst = map_tile_tc(new_selected);
-				g_motion.obj = (obj_t){.type = OBJ_TOWER, .ammo = 4};
+				g_motion.obj = (obj_t){.type = OBJ_TOWER_YELLOW, .ammo = 4};
+				g_tower_available = false;
+				old_selected->obj.can_still_act = false;
+				map_clear_options();
+			break;
+			case OPTION_TOWER_BLUE:
+				g_motion.t = 0;
+				g_motion.t_max = 7;
+				g_motion.src = map_tile_tc(old_selected);
+				g_motion.dst = map_tile_tc(new_selected);
+				g_motion.obj = (obj_t){.type = OBJ_TOWER_BLUE, .ammo = 7};
 				g_tower_available = false;
 				old_selected->obj.can_still_act = false;
 				map_clear_options();
@@ -1049,7 +1095,10 @@ void handle_mouse_click(bool is_left_click)
 			}
 			map_tile(it.tc)->options[OPTION_WALK] =
 				path_exists(selected_tc, it.tc, walk_dist);
-			map_tile(it.tc)->options[OPTION_TOWER] =
+			map_tile(it.tc)->options[OPTION_TOWER_YELLOW] =
+				g_tower_available &&
+				path_exists(selected_tc, it.tc, tower_dist);
+			map_tile(it.tc)->options[OPTION_TOWER_BLUE] =
 				g_tower_available &&
 				path_exists(selected_tc, it.tc, tower_dist);
 		}
@@ -1062,7 +1111,7 @@ void handle_mouse_wheel(int wheel_motion)
 	 * on available tiles. */
 	if (tile_has_options(map_hovered_tile()))
 	{
-		g_selected_option_index += wheel_motion;
+		g_selected_option_index += -wheel_motion;
 		return;
 	}
 
@@ -1223,14 +1272,27 @@ void spawn_one_enemy(obj_type_t type)
 	g_enemy_already_spawn_count++;
 }
 
+bool obj_type_is_tower(obj_type_t type)
+{
+	switch (type)
+	{
+		case OBJ_TOWER_OFF:
+		case OBJ_TOWER_YELLOW:
+		case OBJ_TOWER_BLUE:
+			return true;
+		default:
+			return false;
+	}
+}
+
 bool tile_is_walkable_by_fly(tile_t* tile)
 {
 	return
 		tile->obj.type == OBJ_NONE ||
 		tile->obj.type == OBJ_CRYSTAL ||
 		obj_type_is_unit(tile->obj.type) ||
-		tile->obj.type == OBJ_TOWER ||
-		tile->obj.type == OBJ_TOWER_OFF ||
+		obj_type_is_tower(tile->obj.type) ||
+		tile->obj.type == OBJ_BLOB_RED ||
 		tile->obj.type == OBJ_TREE;
 }
 
@@ -1322,14 +1384,7 @@ bool game_play_enemy(void)
 				}
 				tile_t* dst_tile = map_tile(dst_tc);
 
-				bool can_walk_on =
-					dst_tile->obj.type == OBJ_NONE ||
-					dst_tile->obj.type == OBJ_CRYSTAL ||
-					obj_type_is_unit(dst_tile->obj.type) ||
-					dst_tile->obj.type == OBJ_TOWER ||
-					dst_tile->obj.type == OBJ_TOWER_OFF ||
-					dst_tile->obj.type == OBJ_TREE;
-				if (!can_walk_on)
+				if (!tile_is_walkable_by_fly(dst_tile))
 				{
 					src_tile->obj.can_still_act = false;
 					return false;
@@ -1394,7 +1449,7 @@ bool game_play_enemy(void)
 							continue;
 						}
 						obj_type_t type = map_tile(dirs[i].tc)->obj.type;
-						if (type == OBJ_TOWER || type == OBJ_TOWER_OFF)
+						if (obj_type_is_tower(type))
 						{
 							/* Shoot an egg that will destroy a tower
 							 * (and the big enemy can still act). */
@@ -1462,14 +1517,7 @@ bool game_play_enemy(void)
 				}
 				tile_t* dst_tile = map_tile(dst_tc);
 
-				bool can_walk_on =
-					dst_tile->obj.type == OBJ_NONE ||
-					dst_tile->obj.type == OBJ_CRYSTAL ||
-					obj_type_is_unit(dst_tile->obj.type) ||
-					dst_tile->obj.type == OBJ_TOWER ||
-					dst_tile->obj.type == OBJ_TOWER_OFF ||
-					dst_tile->obj.type == OBJ_TREE;
-				if (!can_walk_on)
+				if (!tile_is_walkable_by_fly(dst_tile))
 				{
 					src_tile->obj.can_still_act = false;
 					return false;
@@ -1520,13 +1568,13 @@ bool game_play_enemy(void)
 	return true;
 }
 
-void tower_shoot(tc_t tower_tc, tc_t target_tc)
+void tower_shoot(tc_t tower_tc, tc_t target_tc, obj_type_t shot_type)
 {
 	g_motion.t = 0;
 	g_motion.t_max = 12;
 	g_motion.src = tower_tc;
 	g_motion.dst = target_tc;
-	g_motion.obj = (obj_t){.type = OBJ_SHOT};
+	g_motion.obj = (obj_t){.type = shot_type};
 
 	/* Update the tower. */
 	tile_t* tower_tile = map_tile(tower_tc);
@@ -1547,7 +1595,8 @@ bool game_play_towers(void)
 		tile_t* tower_tile = map_tile(src_tc);
 		if (tower_tile->obj.can_still_act)
 		{
-			assert(tower_tile->obj.type == OBJ_TOWER);
+			obj_type_t tower_type = tower_tile->obj.type;
+			assert(obj_type_is_tower(tower_type) && tower_type != OBJ_TOWER_OFF);
 
 			struct dir_t
 			{
@@ -1563,12 +1612,20 @@ bool game_play_towers(void)
 				{.dx = 0, .dy = -1}};
 			for (int i = 0; i < 4; i ++)
 			{
-				/* Note that a tower cannot shoot at a distance of one tile. */
-				dirs[i].tc.x = src_tc.x + dirs[i].dx;
-				dirs[i].tc.y = src_tc.y + dirs[i].dy;
-				dirs[i].is_valid =
-					tc_in_map(dirs[i].tc) &&
-					map_tile(dirs[i].tc)->obj.type == OBJ_NONE;
+				dirs[i].tc = src_tc;
+				if (tower_type == OBJ_TOWER_YELLOW)
+				{
+					/* A yellow tower cannot shoot at a distance of one tile. */
+					dirs[i].tc.x += dirs[i].dx;
+					dirs[i].tc.y += dirs[i].dy;
+					dirs[i].is_valid =
+						tc_in_map(dirs[i].tc) &&
+						map_tile(dirs[i].tc)->obj.type == OBJ_NONE;
+				}
+				else
+				{
+					dirs[i].is_valid = tc_in_map(dirs[i].tc);
+				}
 			}
 
 			bool done = false;
@@ -1591,11 +1648,13 @@ bool game_play_towers(void)
 						continue;
 					}
 					obj_type_t type = map_tile(dirs[i].tc)->obj.type;
-					if (type == OBJ_ENEMY_FLY ||
-						type == OBJ_ENEMY_BIG ||
-						type == OBJ_ENEMY_EGG)
+					if (obj_type_is_enemy(type))
 					{
-						tower_shoot(src_tc, dirs[i].tc);
+						obj_type_t shot_type =
+							tower_type == OBJ_TOWER_YELLOW ? OBJ_SHOT_BLUE :
+							tower_type == OBJ_TOWER_BLUE ? OBJ_SHOT_RED :
+							(assert(false), 0);
+						tower_shoot(src_tc, dirs[i].tc, shot_type);
 						return false;
 					}
 					if (type != OBJ_NONE)
@@ -1647,7 +1706,7 @@ void start_tower_phase(void)
 		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
 		tile_t* tile = map_tile(it.tc);
-		if (tile->obj.type == OBJ_TOWER)
+		if (obj_type_is_tower(tile->obj.type) && tile->obj.type != OBJ_TOWER_OFF)
 		{
 			tile->obj.can_still_act = true;
 		}
@@ -1693,9 +1752,13 @@ void game_perform(void)
 				g_game_over = true;
 				printf("Crystal destroyed, game over on turn %d\n", g_turn);
 			}
-			if (g_motion.obj.type == OBJ_SHOT)
+			if (g_motion.obj.type == OBJ_SHOT_BLUE)
 			{
 				dst_tile->obj = (obj_t){0};
+			}
+			else if (g_motion.obj.type == OBJ_SHOT_RED)
+			{
+				dst_tile->obj = (obj_t){.type = OBJ_BLOB_RED};
 			}
 			else
 			{
@@ -1871,8 +1934,8 @@ int main(void)
 		{
 			DRAW_TEXT("HOLD RIGHT-CLICK: MOVE MAP");
 			DRAW_TEXT("LEFT-CLICK: SELECT TILE");
-			DRAW_TEXT("LEFT-CLICK ON WALKABLE TILE: WALK");
-			DRAW_TEXT("RIGHT-CLICK ON TOWERABLE TILE: PLACE TOWER");
+			DRAW_TEXT("LEFT-CLICK ON AVAILABLE TILE: PERFORM SELECTED ACTION");
+			DRAW_TEXT("WHEEL ON AVAILABLE TILE: CHANGE SELECTED ACTION");
 			DRAW_TEXT("LEFT-ALT: DISPLAY INFO");
 			DRAW_TEXT("LEFT-CONTROL: DISPLAY CONTROLS");
 			DRAW_TEXT("C KEY: CENTER VIEW ON CRYSTAL");
@@ -1892,9 +1955,9 @@ int main(void)
 	}
 
 	TTF_Quit();
-	IMG_Quit(); 
+	IMG_Quit();
 	SDL_DestroyRenderer(g_renderer);
 	SDL_DestroyWindow(g_window);
-	SDL_Quit(); 
+	SDL_Quit();
 	return 0;
 }
