@@ -17,8 +17,8 @@ typedef struct sprite_ref_t sprite_ref_t;
 static sprite_ref_t s_sprite_rect_table[] = {
 	#define R16(x_, y_, w_, h_) {.x = x_ * 16, .y = y_ * 16, .w = w_ * 16, .h = h_ * 16}
 	[SPRITE_ROCK] =                   {0, R16(0, 0, 1, 1)},
-	[SPRITE_TREE] =                   {0, R16(1, 6, 1, 1)},
-	[SPRITE_CRYSTAL] =                {0, R16(0, 7, 1, 1)},
+	[SPRITE_TREE] =                   {1, R16(2, 2, 1, 1)}, // {0, R16(1, 6, 1, 1)}, // {1, R16(2, 2, 1, 1)},
+	[SPRITE_CRYSTAL] =                {1, R16(0, 2, 1, 1)},
 	[SPRITE_GRASSLAND] =              {0, R16(0, 8, 1, 1)},
 	[SPRITE_DESERT] =                 {0, R16(1, 8, 1, 1)},
 	[SPRITE_SIDE_DIRT] =              {0, R16(2, 8, 1, 1)},
@@ -27,8 +27,8 @@ static sprite_ref_t s_sprite_rect_table[] = {
 	[SPRITE_GRASSLAND_DECORATION_1] = {1, R16(5, 0, 1, 1)},
 	[SPRITE_GRASSLAND_DECORATION_2] = {1, R16(6, 0, 1, 1)},
 	[SPRITE_GRASSLAND_DECORATION_3] = {1, R16(7, 0, 1, 1)},
-	[SPRITE_UNIT_RED] =               {0, R16(0, 1, 1, 1)},
-	[SPRITE_UNIT_BLUE] =              {0, R16(1, 1, 1, 1)},
+	[SPRITE_UNIT_RED] =               {1, R16(5, 1, 1, 1)},
+	[SPRITE_UNIT_BLUE] =              {1, R16(4, 1, 1, 1)},
 	[SPRITE_UNIT_PINK] =              {0, R16(2, 1, 1, 1)},
 	[SPRITE_WALK] =                   {0, R16(2, 4, 1, 1)},
 	[SPRITE_TOWER_YELLOW] =           {0, R16(0, 4, 1, 1)},
