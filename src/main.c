@@ -380,6 +380,7 @@ bool option_is_tower(option_t option)
 struct tile_t
 {
 	floor_type_t floor;
+	int floor_decoration;
 	obj_t obj;
 	bool is_hovered;
 	bool is_selected;
@@ -390,7 +391,15 @@ typedef struct tile_t tile_t;
 void tile_init(tile_t* tile)
 {
 	*tile = (tile_t){0};
+
 	tile->floor = FLOOR_GRASSLAND;
+
+	tile->floor_decoration = 0;
+	if (rand() % 10 == 0)
+	{
+		tile->floor_decoration = 1 + rand() % 3;
+	}
+
 	tile->obj = (obj_t){.type = OBJ_NONE};
 	if (rand() % 3 == 0)
 	{
@@ -482,49 +491,14 @@ bool obj_type_is_tower(obj_type_t type);
 
 void draw_tile(tile_t const* tile, sc_t sc, int side)
 {
-	/* Draw the floor tile sprite. */
-	sprite_t sprite;
-	switch (tile->floor)
-	{
-		case FLOOR_GRASSLAND: sprite = SPRITE_GRASSLAND; break;
-		case FLOOR_DESERT:    sprite = SPRITE_DESERT;    break;
-		case FLOOR_WATER:     sprite = SPRITE_WATER;     break;
-		default: assert(false);
-	}
+	assert(tile->floor == FLOOR_GRASSLAND);
+
+	/* Draw grassland color and sprite decoration. */
 	SDL_Rect rect = {.x = sc.x, .y = sc.y, .w = side, .h = side};
-	if (tile->floor == FLOOR_WATER)
-	{
-		rect.y += 3 * (g_tile_side_pixels / 16);
-	}
-	draw_sprite(sprite, &rect);
-
-	if (tile->floor != FLOOR_WATER)
-	{
-		rect.y += g_tile_side_pixels;
-		draw_sprite(SPRITE_SIDE_DIRT, &rect);
-		rect.y -= g_tile_side_pixels;
-	}
-
-	/* Apply a color filter on the tile sprite to make them be
-	 * less detailed because we see too much the details of these
-	 * and it does not look good (for now). */
-	/* TODO: Apply the correction on the sprite sheet asset instead
-	 * of here. */
-	switch (tile->floor)
-	{
-		case FLOOR_GRASSLAND:
-			SDL_SetRenderDrawColor(g_renderer, 0, 255, 0, 180);
-		break;
-		case FLOOR_DESERT:
-			SDL_SetRenderDrawColor(g_renderer, 255, 255, 0, 110);
-		break;
-		default:
-			SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 0);
-		break;
-	}
-	SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawColor(g_renderer, 109, 216, 37, 255);
 	SDL_RenderFillRect(g_renderer, &rect);
-	SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_NONE);
+	sprite_t sprite = SPRITE_GRASSLAND_DECORATION_0 + tile->floor_decoration;
+	draw_sprite(sprite, &rect);
 
 	/* Draw additional UI square around the tile. */
 	if (tile->is_selected)
@@ -769,9 +743,9 @@ void map_generate(void)
 		tile_t* tile = map_tile(it.tc);
 		*tile = (tile_t){0};
 
-		if (rand() % 7 == 1)
+		if (rand() % 10 == 0)
 		{
-			tile->floor = FLOOR_DESERT;
+			tile->floor_decoration = 1 + rand() % 3;
 		}
 
 		tile->obj = (obj_t){0};
