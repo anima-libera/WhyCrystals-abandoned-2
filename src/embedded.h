@@ -22,6 +22,9 @@ EMBEDDED("../assets/test", TEXT) char const g_asset_test[];
 EMBEDDED("../assets/sprite_sheet.png", BINARY) unsigned char const g_asset_sprite_sheet_png[];
 EMBEDDED("../assets/sprite_sheet.png", SIZE) unsigned int const g_asset_sprite_sheet_png_size;
 
+EMBEDDED("../assets/sprite_sheet_2.png", BINARY) unsigned char const g_asset_sprite_sheet_2_png[];
+EMBEDDED("../assets/sprite_sheet_2.png", SIZE) unsigned int const g_asset_sprite_sheet_2_png_size;
+
 EMBEDDED("../assets/Retro Gaming.ttf", BINARY) unsigned char const g_asset_font[];
 EMBEDDED("../assets/Retro Gaming.ttf", SIZE) unsigned int const g_asset_font_size;
 
