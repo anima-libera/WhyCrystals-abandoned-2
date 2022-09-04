@@ -1449,10 +1449,13 @@ bool game_play_enemy(void)
 	}
 
 	int const enemy_spawn_number =
-		g_turn <  5 ? 1 :
-		g_turn < 10 ? 1 + (g_turn % 2) :
-		g_turn < 20 ? 2 + (g_turn % 2) :
+		g_turn <  5 ? 0 + (g_turn % 2) :
+		g_turn < 10 ? 1 :
+		g_turn < 15 ? 1 + (g_turn % 2) :
+		g_turn < 20 ? 2 :
+		g_turn < 25 ? 2 + (g_turn % 2) :
 		g_turn < 30 ? 3 :
+		g_turn < 35 ? 3 + (g_turn % 2) :
 		4;
 	while (g_enemy_already_spawn_count < enemy_spawn_number)
 	{
@@ -1460,7 +1463,8 @@ bool game_play_enemy(void)
 		return false;
 	}
 
-	if ((g_turn+1) % 5 == 0 && g_enemy_big_already_spawn_count < 2)
+	int const enemy_big_spawn_number = (g_turn+1) % 5 == 0 ? 1 : 0;
+	if (g_enemy_big_already_spawn_count < enemy_big_spawn_number)
 	{
 		spawn_one_enemy(OBJ_ENEMY_BIG);
 		return false;
