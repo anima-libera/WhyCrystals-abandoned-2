@@ -287,7 +287,6 @@ enum obj_type_t
 	OBJ_UNIT_PINK,
 	OBJ_TOWER_YELLOW,
 	OBJ_TOWER_BLUE,
-	OBJ_TOWER_OFF,
 	OBJ_SHOT_BLUE,
 	OBJ_SHOT_RED,
 	OBJ_BLOB_RED,
@@ -307,6 +306,8 @@ struct obj_t
 };
 typedef struct obj_t obj_t;
 
+bool obj_type_is_tower(obj_type_t type);
+
 void draw_obj(obj_t const* obj, sc_t sc, int side)
 {
 	/* Draw the object sprite. */
@@ -322,7 +323,6 @@ void draw_obj(obj_t const* obj, sc_t sc, int side)
 		case OBJ_UNIT_PINK:        sprite = SPRITE_UNIT_PINK;        break;
 		case OBJ_TOWER_YELLOW:     sprite = SPRITE_TOWER_YELLOW;     break;
 		case OBJ_TOWER_BLUE:       sprite = SPRITE_TOWER_BLUE;       break;
-		case OBJ_TOWER_OFF:        sprite = SPRITE_TOWER_OFF;        break;
 		case OBJ_SHOT_BLUE:        sprite = SPRITE_SHOT_BLUE;        break;
 		case OBJ_SHOT_RED:         sprite = SPRITE_SHOT_RED;         break;
 		case OBJ_BLOB_RED:         sprite = SPRITE_BLOB_RED;         break;
@@ -331,6 +331,13 @@ void draw_obj(obj_t const* obj, sc_t sc, int side)
 		case OBJ_ENEMY_FLY_RED:    sprite = SPRITE_ENEMY_FLY_RED;    break;
 		case OBJ_ENEMY_BIG:        sprite = SPRITE_ENEMY_BIG;        break;
 		default: assert(false);
+	}
+	if (obj_type_is_tower(obj->type) && obj->ammo <= 0)
+	{
+		/* Normally a sprite value for a tower is followed by the sprite value
+		 * for that same tower but turned off.
+		 * For example `SPRITE_TOWER_YELLOW + 1 == SPRITE_TOWER_YELLOW_OFF`. */
+		sprite++;
 	}
 	SDL_Rect rect = {.x = sc.x, .y = sc.y, .w = side, .h = side};
 	draw_sprite(sprite, &rect);
@@ -578,7 +585,7 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 	draw_obj(&tile->obj, sc, side);
 
 	/* Draw the tower ammo count. */
-	if ((obj_type_is_tower(tile->obj.type) && tile->obj.type != OBJ_TOWER_OFF) &&
+	if ((obj_type_is_tower(tile->obj.type) && tile->obj.ammo > 0) &&
 		(tile->is_selected || tile->is_hovered || SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT]))
 	{
 		char string[20];
@@ -1273,7 +1280,6 @@ bool obj_type_is_tower(obj_type_t type)
 {
 	switch (type)
 	{
-		case OBJ_TOWER_OFF:
 		case OBJ_TOWER_YELLOW:
 		case OBJ_TOWER_BLUE:
 			return true;
@@ -1458,11 +1464,8 @@ void tower_shoot(tc_t tower_tc, tc_t target_tc, obj_type_t shot_type)
 	/* Update the tower. */
 	tile_t* tower_tile = map_tile(tower_tc);
 	tower_tile->obj.can_still_act = false;
+	assert(tower_tile->obj.ammo > 0);
 	tower_tile->obj.ammo--;
-	if (tower_tile->obj.ammo <= 0)
-	{
-		tower_tile->obj.type = OBJ_TOWER_OFF;
-	}
 }
 
 bool game_play_towers(void)
@@ -1475,7 +1478,7 @@ bool game_play_towers(void)
 		if (tower_tile->obj.can_still_act)
 		{
 			obj_type_t tower_type = tower_tile->obj.type;
-			assert(obj_type_is_tower(tower_type) && tower_type != OBJ_TOWER_OFF);
+			assert(obj_type_is_tower(tower_type) && tower_tile->obj.ammo > 0);
 
 			struct dir_t
 			{
@@ -1584,7 +1587,7 @@ void start_tower_phase(void)
 		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
 		tile_t* tile = map_tile(it.tc);
-		if (obj_type_is_tower(tile->obj.type) && tile->obj.type != OBJ_TOWER_OFF)
+		if (obj_type_is_tower(tile->obj.type) && tile->obj.ammo > 0)
 		{
 			tile->obj.can_still_act = true;
 		}
