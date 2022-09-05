@@ -261,7 +261,7 @@ struct rgb_t
 };
 typedef struct rgb_t rgb_t;
 
-void draw_text(char const* text, rgb_t color, sc_t sc, bool center_x)
+void draw_text(char const* text, rgb_t color, sc_t sc)
 {
 	SDL_Color sdl_color = {.r = color.r, .g = color.g, .b = color.b, .a = 255};
 	SDL_Surface* surface = TTF_RenderText_Solid(g_font, text, sdl_color);
@@ -269,9 +269,8 @@ void draw_text(char const* text, rgb_t color, sc_t sc, bool center_x)
 	SDL_Texture* texture = SDL_CreateTextureFromSurface(g_renderer, surface);
 	assert(texture != NULL);
 	SDL_FreeSurface(surface);
-	SDL_Rect rect = {.y = sc.y};
+	SDL_Rect rect = {.x = sc.x, .y = sc.y};
 	SDL_QueryTexture(texture, NULL, NULL, &rect.w, &rect.h);
-	rect.x = center_x ? sc.x - rect.w/2 : sc.x;
 	SDL_RenderCopy(g_renderer, texture, NULL, &rect);
 	SDL_DestroyTexture(texture);
 }
@@ -282,18 +281,17 @@ enum obj_type_t
 	OBJ_ROCK,
 	OBJ_TREE,
 	OBJ_CRYSTAL,
-	OBJ_UNIT_RED,
-	OBJ_UNIT_BLUE,
-	OBJ_UNIT_PINK,
+	OBJ_UNIT_BASIC,
+	OBJ_UNIT_WALKER,
+	OBJ_UNIT_SHROOM,
 	OBJ_TOWER_YELLOW,
 	OBJ_TOWER_BLUE,
 	OBJ_SHOT_BLUE,
 	OBJ_SHOT_RED,
 	OBJ_BLOB_RED,
 	OBJ_ENEMY_EGG,
-	OBJ_ENEMY_FLY_PURPLE,
-	OBJ_ENEMY_FLY_RED,
-	OBJ_ENEMY_BIG,
+	OBJ_ENEMY_BLOB,
+	OBJ_ENEMY_LEGS,
 };
 typedef enum obj_type_t obj_type_t;
 
@@ -307,29 +305,30 @@ struct obj_t
 typedef struct obj_t obj_t;
 
 bool obj_type_is_tower(obj_type_t type);
+int g_time;
 
 void draw_obj(obj_t const* obj, sc_t sc, int side)
 {
 	/* Draw the object sprite. */
 	sprite_t sprite;
+	bool tall_sprite = false;
 	switch (obj->type)
 	{
-		case OBJ_NONE:             return;
-		case OBJ_ROCK:             sprite = SPRITE_ROCK;             break;
-		case OBJ_TREE:             sprite = SPRITE_TREE;             break;
-		case OBJ_CRYSTAL:          sprite = SPRITE_CRYSTAL;          break;
-		case OBJ_UNIT_RED:         sprite = SPRITE_UNIT_RED;         break;
-		case OBJ_UNIT_BLUE:        sprite = SPRITE_UNIT_BLUE;        break;
-		case OBJ_UNIT_PINK:        sprite = SPRITE_UNIT_PINK;        break;
-		case OBJ_TOWER_YELLOW:     sprite = SPRITE_TOWER_YELLOW;     break;
-		case OBJ_TOWER_BLUE:       sprite = SPRITE_TOWER_BLUE;       break;
-		case OBJ_SHOT_BLUE:        sprite = SPRITE_SHOT_BLUE;        break;
-		case OBJ_SHOT_RED:         sprite = SPRITE_SHOT_RED;         break;
-		case OBJ_BLOB_RED:         sprite = SPRITE_BLOB_RED;         break;
-		case OBJ_ENEMY_EGG:        sprite = SPRITE_ENEMY_EGG;        break;
-		case OBJ_ENEMY_FLY_PURPLE: sprite = SPRITE_ENEMY_FLY_PURPLE; break;
-		case OBJ_ENEMY_FLY_RED:    sprite = SPRITE_ENEMY_FLY_RED;    break;
-		case OBJ_ENEMY_BIG:        sprite = SPRITE_ENEMY_BIG;        break;
+		case OBJ_NONE:         return;
+		case OBJ_ROCK:         sprite = SPRITE_ROCK;         break;
+		case OBJ_TREE:         sprite = SPRITE_TREE;         tall_sprite = true; break;
+		case OBJ_CRYSTAL:      sprite = SPRITE_CRYSTAL;      tall_sprite = true; break;
+		case OBJ_UNIT_WALKER:  sprite = SPRITE_UNIT_WALKER;  break;
+		case OBJ_UNIT_BASIC:   sprite = SPRITE_UNIT_BASIC;   break;
+		case OBJ_UNIT_SHROOM:  sprite = SPRITE_UNIT_SHROOM;  break;
+		case OBJ_TOWER_YELLOW: sprite = SPRITE_TOWER_YELLOW; break;
+		case OBJ_TOWER_BLUE:   sprite = SPRITE_TOWER_BLUE;   break;
+		case OBJ_SHOT_BLUE:    sprite = SPRITE_SHOT_BLUE;    break;
+		case OBJ_SHOT_RED:     sprite = SPRITE_SHOT_RED;     break;
+		case OBJ_BLOB_RED:     sprite = SPRITE_BLOB_RED;     break;
+		case OBJ_ENEMY_EGG:    sprite = SPRITE_ENEMY_EGG;    break;
+		case OBJ_ENEMY_BLOB:   sprite = SPRITE_ENEMY_BLOB;   break;
+		case OBJ_ENEMY_LEGS:   sprite = SPRITE_ENEMY_LEGS;   break;
 		default: assert(false);
 	}
 	if (obj_type_is_tower(obj->type) && obj->ammo <= 0)
@@ -339,26 +338,31 @@ void draw_obj(obj_t const* obj, sc_t sc, int side)
 		 * For example `SPRITE_TOWER_YELLOW + 1 == SPRITE_TOWER_YELLOW_OFF`. */
 		sprite++;
 	}
-	SDL_Rect rect = {.x = sc.x, .y = sc.y, .w = side, .h = side};
-	draw_sprite(sprite, &rect);
+	SDL_Rect tile_rect = {.x = sc.x, .y = sc.y, .w = side, .h = side};
+	SDL_Rect obj_rect = tile_rect;
+	obj_rect.y -= 2 * (g_tile_side_pixels / 16);
+	if (tall_sprite)
+	{
+		obj_rect.y -= g_tile_side_pixels;
+		obj_rect.h *= 2;
+	}
+	draw_sprite(sprite, &obj_rect);
 
 	/* Draw the can-still-act indicator. */
 	if (obj->can_still_act)
 	{
-		rect.x += 4;
-		rect.y += 4;
-		rect.w = 8;
-		rect.h = 8;
-		SDL_SetRenderDrawColor(g_renderer, 0, 100, 0, 255);
-		SDL_RenderDrawRect(g_renderer, &rect);
+		SDL_Rect token_rect = obj_rect;
+		token_rect.w = 6 * (g_tile_side_pixels / 16);
+		token_rect.h = 6 * (g_tile_side_pixels / 16);
+		token_rect.x += g_tile_side_pixels / 2 - token_rect.w / 2;
+		token_rect.y -= token_rect.h + 2.0f * cos((float)g_time * 0.03f);
+		draw_sprite(SPRITE_CAN_STILL_ACT, &token_rect);
 	}
 }
 
 enum floor_type_t
 {
 	FLOOR_GRASSLAND,
-	FLOOR_DESERT,
-	FLOOR_WATER,
 };
 typedef enum floor_type_t floor_type_t;
 
@@ -588,18 +592,32 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 	if ((obj_type_is_tower(tile->obj.type) && tile->obj.ammo > 0) &&
 		(tile->is_selected || tile->is_hovered || SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT]))
 	{
+		SDL_Rect text_rect = rect;
+		text_rect.y -= 18;
+		text_rect.w = 18;
+		text_rect.h = 18;
+		SDL_SetRenderDrawColor(g_renderer, 255, 255, 255, 255);
+		SDL_RenderFillRect(g_renderer, &text_rect);
+		sc_t text_sc = {.x = rect.x, .y = rect.y - 22};
 		char string[20];
 		sprintf(string, "%d", tile->obj.ammo);
-		draw_text(string, (rgb_t){0, 0, 0}, (sc_t){rect.x + 3, rect.y - 1}, false);
+		draw_text(string, (rgb_t){0, 0, 0}, text_sc);
 	}
 
 	/* Draw the life count. */
-	if (tile->obj.type == OBJ_ENEMY_BIG &&
+	if (tile->obj.type == OBJ_ENEMY_LEGS &&
 		(tile->is_selected || tile->is_hovered || SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT]))
 	{
+		SDL_Rect text_rect = rect;
+		text_rect.y -= 18;
+		text_rect.w = 18;
+		text_rect.h = 18;
+		SDL_SetRenderDrawColor(g_renderer, 255, 255, 255, 255);
+		SDL_RenderFillRect(g_renderer, &text_rect);
+		sc_t text_sc = {.x = rect.x, .y = rect.y - 22};
 		char string[20];
 		sprintf(string, "%d", tile->obj.life);
-		draw_text(string, (rgb_t){0, 0, 255}, (sc_t){rect.x + 3, rect.y - 1}, false);
+		draw_text(string, (rgb_t){0, 0, 255}, text_sc);
 	}
 }
 
@@ -756,20 +774,17 @@ void map_generate(void)
 		}
 
 		tile->obj = (obj_t){0};
-		if (tile->floor != FLOOR_WATER)
+		if (rand() % 17 == 1)
 		{
-			if (rand() % 17 == 1)
-			{
-				tile->obj.type = OBJ_ENEMY_FLY_PURPLE;
-			}
-			else if (rand() % 13 == 3)
-			{
-				tile->obj.type = OBJ_ROCK;
-			}
-			else if (rand() % 13 == 3)
-			{
-				tile->obj.type = OBJ_TREE;
-			}
+			tile->obj.type = OBJ_ENEMY_BLOB;
+		}
+		else if (rand() % 13 == 3)
+		{
+			tile->obj.type = OBJ_ROCK;
+		}
+		else if (rand() % 13 == 3)
+		{
+			tile->obj.type = OBJ_TREE;
 		}
 	}
 
@@ -782,11 +797,11 @@ void map_generate(void)
 	/* Place the 3 units around the crystal. */
 	tc_t tc;
 	tc = g_crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) += 1;
-	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_RED};
+	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_WALKER};
 	tc = g_crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) -= 1;
-	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_BLUE};
+	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_BASIC};
 	tc = g_crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) += rand() % 2 ? 2 : -2;
-	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_PINK};
+	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_SHROOM};
 
 	/* Also place a tower near the crystal. */
 	tc = g_crystal_tc; tc.x += rand() % 2 ? 1 : -1; tc.y += rand() % 2 ? 1 : -1;
@@ -800,7 +815,7 @@ void map_generate(void)
 		tc_iter_rect_cond(&it); tc_iter_rect_next(&it))
 	{
 		tile_t* tile = map_tile(it.tc);
-		if (tile->obj.type == OBJ_ENEMY_FLY_PURPLE)
+		if (tile->obj.type == OBJ_ENEMY_BLOB)
 		{
 			tile->obj.type = OBJ_ENEMY_EGG;
 		}
@@ -983,9 +998,9 @@ bool obj_type_is_unit(obj_type_t type)
 {
 	switch (type)
 	{
-		case OBJ_UNIT_RED:
-		case OBJ_UNIT_BLUE:
-		case OBJ_UNIT_PINK:
+		case OBJ_UNIT_WALKER:
+		case OBJ_UNIT_BASIC:
+		case OBJ_UNIT_SHROOM:
 			return true;
 		default:
 			return false;
@@ -1067,14 +1082,14 @@ void handle_mouse_click(bool is_left_click)
 	{
 		g_selected_option_index = 0;
 		int walk_dist = 
-			new_selected->obj.type == OBJ_UNIT_RED ? 4 :
-			new_selected->obj.type == OBJ_UNIT_BLUE ? 3 :
-			new_selected->obj.type == OBJ_UNIT_PINK ? 2 :
+			new_selected->obj.type == OBJ_UNIT_WALKER ? 4 :
+			new_selected->obj.type == OBJ_UNIT_BASIC ? 3 :
+			new_selected->obj.type == OBJ_UNIT_SHROOM ? 2 :
 			(assert(false), 0);
 		int tower_dist =
-			new_selected->obj.type == OBJ_UNIT_RED ? 1 :
-			new_selected->obj.type == OBJ_UNIT_BLUE ? 2 :
-			new_selected->obj.type == OBJ_UNIT_PINK ? 3 :
+			new_selected->obj.type == OBJ_UNIT_WALKER ? 1 :
+			new_selected->obj.type == OBJ_UNIT_BASIC ? 2 :
+			new_selected->obj.type == OBJ_UNIT_SHROOM ? 3 :
 			(assert(false), 0);
 		/* A unit that can still act is selected, accessible tiles
 		 * have to be flagged as walkable. */
@@ -1221,9 +1236,8 @@ bool obj_type_is_enemy(obj_type_t type)
 {
 	switch (type)
 	{
-		case OBJ_ENEMY_FLY_PURPLE:
-		case OBJ_ENEMY_FLY_RED:
-		case OBJ_ENEMY_BIG:
+		case OBJ_ENEMY_BLOB:
+		case OBJ_ENEMY_LEGS:
 		case OBJ_ENEMY_EGG:
 			return true;
 		default:
@@ -1263,14 +1277,14 @@ void spawn_one_enemy(obj_type_t type)
 	g_motion.src = spawn_location_src;
 	g_motion.dst = spawn_location_dst;
 	g_motion.obj = (obj_t){.type = type};
-	if (g_motion.obj.type == OBJ_ENEMY_BIG)
+	if (g_motion.obj.type == OBJ_ENEMY_LEGS)
 	{
 		g_motion.obj.life = 3;
 	}
 	g_motion.obj.can_still_act = false;
 
 	g_enemy_already_spawn_count++;
-	if (g_motion.obj.type == OBJ_ENEMY_BIG)
+	if (g_motion.obj.type == OBJ_ENEMY_LEGS)
 	{
 		g_enemy_big_already_spawn_count++;
 	}
@@ -1374,19 +1388,19 @@ bool game_play_enemy(void)
 				src_tile->obj.can_still_act = false;
 				if (rand() % 4 == 0)
 				{
-					src_tile->obj.type = OBJ_ENEMY_FLY_PURPLE;
+					src_tile->obj.type = OBJ_ENEMY_BLOB;
 				}
 				return false;
 			}
-			else if (src_tile->obj.type == OBJ_ENEMY_FLY_PURPLE ||
-				src_tile->obj.type == OBJ_ENEMY_BIG)
+			else if (src_tile->obj.type == OBJ_ENEMY_BLOB ||
+				src_tile->obj.type == OBJ_ENEMY_LEGS)
 			{
 				/* A fly can move or lay an egg to an adjacent tile,
 				 * which is to be decided. */
 				bool lay_egg = rand() % 11 == 0;
 				
 				tc_t dst_tc = compute_fly_move(src_tc, 2, true);
-				if (src_tile->obj.type == OBJ_ENEMY_BIG &&
+				if (src_tile->obj.type == OBJ_ENEMY_LEGS &&
 					rand() % 17 != 0)
 				{
 					dst_tc = compute_fly_move(dst_tc, 2, true);
@@ -1439,14 +1453,14 @@ bool game_play_enemy(void)
 		4;
 	while (g_enemy_already_spawn_count < enemy_spawn_number)
 	{
-		spawn_one_enemy(OBJ_ENEMY_FLY_PURPLE);
+		spawn_one_enemy(OBJ_ENEMY_BLOB);
 		return false;
 	}
 
 	int const enemy_big_spawn_number = (g_turn+1) % 5 == 0 ? 1 : 0;
 	if (g_enemy_big_already_spawn_count < enemy_big_spawn_number)
 	{
-		spawn_one_enemy(OBJ_ENEMY_BIG);
+		spawn_one_enemy(OBJ_ENEMY_LEGS);
 		return false;
 	}
 
@@ -1635,7 +1649,7 @@ void game_perform(void)
 			}
 			if (g_motion.obj.type == OBJ_SHOT_BLUE)
 			{
-				if (dst_tile->obj.type == OBJ_ENEMY_BIG)
+				if (dst_tile->obj.type == OBJ_ENEMY_LEGS)
 				{
 					dst_tile->obj.life--;
 					if (dst_tile->obj.life <= 0)
@@ -1650,7 +1664,7 @@ void game_perform(void)
 			}
 			else if (g_motion.obj.type == OBJ_SHOT_RED)
 			{
-				if (dst_tile->obj.type == OBJ_ENEMY_BIG)
+				if (dst_tile->obj.type == OBJ_ENEMY_LEGS)
 				{
 					dst_tile->obj.life--;
 					if (dst_tile->obj.life <= 0)
@@ -1762,9 +1776,9 @@ int main(int argc, char const* const* argv)
 			tc_iter_all_cond(&it); tc_iter_all_next(&it))
 		{
 			tile_t* tile = map_tile(it.tc);
-			if (tile->obj.type == OBJ_ENEMY_FLY_PURPLE)
+			if (tile->obj.type == OBJ_ENEMY_BLOB)
 			{
-				tile->obj.type = OBJ_ENEMY_BIG;
+				tile->obj.type = OBJ_ENEMY_LEGS;
 				tile->obj.life = 3;
 			}
 		}
@@ -1776,6 +1790,7 @@ int main(int argc, char const* const* argv)
 
 	printf("Hold the LEFT CONTROL key to display the controls\n");
 
+	g_time = 0;
 	bool running = true;
 	while (running)
 	{
@@ -1850,7 +1865,7 @@ int main(int argc, char const* const* argv)
 		int y = 0;
 		#define DRAW_TEXT(...) \
 			snprintf(string, sizeof string, __VA_ARGS__); \
-			draw_text(string, (rgb_t){0, 0, 0}, (sc_t){0, y}, false); \
+			draw_text(string, (rgb_t){0, 0, 0}, (sc_t){0, y}); \
 			y += 20
 		DRAW_TEXT("TURN %d", g_turn);
 		if (g_game_over)
@@ -1874,6 +1889,7 @@ int main(int argc, char const* const* argv)
 		#undef DRAW_TEXT
 		
 		SDL_RenderPresent(g_renderer);
+		g_time++;
 	}
 
 	if (!g_game_over)
