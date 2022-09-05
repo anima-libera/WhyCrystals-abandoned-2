@@ -514,7 +514,7 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 	SDL_Rect rect = {.x = sc.x, .y = sc.y, .w = side, .h = side};
 	SDL_SetRenderDrawColor(g_renderer, 109, 216, 37, 255);
 	SDL_RenderFillRect(g_renderer, &rect);
-	sprite_t sprite = SPRITE_GRASSLAND_DECORATION_0 + tile->sprite_variant;
+	sprite_t sprite = SPRITE_GRASSLAND_0 + tile->sprite_variant;
 	draw_sprite(sprite, &rect);
 
 	/* Draw additional UI square around the tile. */

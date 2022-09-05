@@ -16,38 +16,36 @@ typedef struct sprite_ref_t sprite_ref_t;
 
 static sprite_ref_t s_sprite_rect_table[] = {
 	#define R16(x_, y_, w_, h_) {.x = x_ * 16, .y = y_ * 16, .w = w_ * 16, .h = h_ * 16}
-	[SPRITE_ROCK_1] =                 {1, R16(2, 5, 1, 1)},
-	[SPRITE_ROCK_2] =                 {1, R16(3, 5, 1, 1)},
-	[SPRITE_ROCK_3] =                 {1, R16(4, 5, 1, 1)},
-	[SPRITE_TREE] =                   {1, R16(1, 4, 1, 2)},
-	[SPRITE_CRYSTAL] =                {1, R16(0, 4, 1, 2)},
-	[SPRITE_GRASSLAND_DECORATION_0] = {1, R16(4, 0, 1, 1)},
-	[SPRITE_GRASSLAND_DECORATION_1] = {1, R16(5, 0, 1, 1)},
-	[SPRITE_GRASSLAND_DECORATION_2] = {1, R16(6, 0, 1, 1)},
-	[SPRITE_GRASSLAND_DECORATION_3] = {1, R16(7, 0, 1, 1)},
-	[SPRITE_UNIT_BASIC] =             {1, R16(4, 1, 1, 1)},
-	[SPRITE_UNIT_WALKER] =            {1, R16(5, 1, 1, 1)},
-	[SPRITE_UNIT_SHROOM] =            {1, R16(6, 1, 1, 1)},
-	[SPRITE_CAN_STILL_ACT] =          {1, {1*16, 3*16, 6, 6}},
-	[SPRITE_WALK] =                   {0, R16(2, 4, 1, 1)},
-	[SPRITE_TOWER_YELLOW] =           {1, R16(4, 3, 1, 1)},
-	[SPRITE_TOWER_YELLOW_OFF] =       {1, R16(4, 4, 1, 1)},
-	[SPRITE_TOWER_BLUE] =             {1, R16(6, 3, 1, 1)},
-	[SPRITE_TOWER_BLUE_OFF] =         {1, R16(6, 4, 1, 1)},
-	[SPRITE_TOWER_GREEN] =            {0, R16(4, 4, 1, 1)},
-	[SPRITE_TOWER_WHITE] =            {0, R16(5, 4, 1, 1)},
-	[SPRITE_SHOT_BLUE] =              {1, R16(2, 6, 1, 1)},
-	[SPRITE_SHOT_RED] =               {1, R16(3, 6, 1, 1)},
-	[SPRITE_BLOB_RED] =               {1, R16(4, 6, 1, 1)},
-	[SPRITE_ENEMY_EGG] =              {1, R16(7, 2, 1, 1)},
-	[SPRITE_ENEMY_BLOB] =             {1, R16(4, 2, 1, 1)},
-	[SPRITE_ENEMY_LEGS] =             {1, R16(5, 2, 1, 1)},
+	[SPRITE_ROCK_1] =           {1, R16(2, 5, 1, 1)},
+	[SPRITE_ROCK_2] =           {1, R16(3, 5, 1, 1)},
+	[SPRITE_ROCK_3] =           {1, R16(4, 5, 1, 1)},
+	[SPRITE_TREE] =             {1, R16(1, 4, 1, 2)},
+	[SPRITE_CRYSTAL] =          {1, R16(0, 4, 1, 2)},
+	[SPRITE_GRASSLAND_0] =      {1, R16(4, 0, 1, 1)},
+	[SPRITE_GRASSLAND_1] =      {1, R16(5, 0, 1, 1)},
+	[SPRITE_GRASSLAND_2] =      {1, R16(6, 0, 1, 1)},
+	[SPRITE_GRASSLAND_3] =      {1, R16(7, 0, 1, 1)},
+	[SPRITE_UNIT_BASIC] =       {1, R16(4, 1, 1, 1)},
+	[SPRITE_UNIT_WALKER] =      {1, R16(5, 1, 1, 1)},
+	[SPRITE_UNIT_SHROOM] =      {1, R16(6, 1, 1, 1)},
+	[SPRITE_CAN_STILL_ACT] =    {1, {1*16, 3*16, 6, 6}},
+	[SPRITE_WALK] =             {1, R16(2, 3, 1, 1)},
+	[SPRITE_TOWER_YELLOW] =     {1, R16(4, 3, 1, 1)},
+	[SPRITE_TOWER_YELLOW_OFF] = {1, R16(4, 4, 1, 1)},
+	[SPRITE_TOWER_BLUE] =       {1, R16(6, 3, 1, 1)},
+	[SPRITE_TOWER_BLUE_OFF] =   {1, R16(6, 4, 1, 1)},
+	[SPRITE_SHOT_BLUE] =        {1, R16(2, 6, 1, 1)},
+	[SPRITE_SHOT_RED] =         {1, R16(3, 6, 1, 1)},
+	[SPRITE_BLOB_RED] =         {1, R16(4, 6, 1, 1)},
+	[SPRITE_ENEMY_EGG] =        {1, R16(7, 2, 1, 1)},
+	[SPRITE_ENEMY_BLOB] =       {1, R16(4, 2, 1, 1)},
+	[SPRITE_ENEMY_LEGS] =       {1, R16(5, 2, 1, 1)},
 	#undef R16
 };
 
 void init_sprite_sheet(void)
 {
-	/* Sprite sheet 1. */
+	/* Sprite sheet 1 (legacy, could be removed). */
 	SDL_RWops* rwops_png = SDL_RWFromConstMem(
 		g_asset_sprite_sheet_png,
 		g_asset_sprite_sheet_png_size);
