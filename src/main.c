@@ -301,6 +301,7 @@ struct obj_t
 	bool can_still_act;
 	int ammo; /* Used by towers. */
 	int life; /* Used by big enemies. */
+	int sprite_variant;
 };
 typedef struct obj_t obj_t;
 
@@ -315,7 +316,7 @@ void draw_obj(obj_t const* obj, sc_t sc, int side)
 	switch (obj->type)
 	{
 		case OBJ_NONE:         return;
-		case OBJ_ROCK:         sprite = SPRITE_ROCK;         break;
+		case OBJ_ROCK:         sprite = SPRITE_ROCK_1 + obj->sprite_variant;     break;
 		case OBJ_TREE:         sprite = SPRITE_TREE;         tall_sprite = true; break;
 		case OBJ_CRYSTAL:      sprite = SPRITE_CRYSTAL;      tall_sprite = true; break;
 		case OBJ_UNIT_WALKER:  sprite = SPRITE_UNIT_WALKER;  break;
@@ -391,7 +392,7 @@ bool option_is_tower(option_t option)
 struct tile_t
 {
 	floor_type_t floor;
-	int floor_decoration;
+	int sprite_variant;
 	obj_t obj;
 	bool is_hovered;
 	bool is_selected;
@@ -405,16 +406,21 @@ void tile_init(tile_t* tile)
 
 	tile->floor = FLOOR_GRASSLAND;
 
-	tile->floor_decoration = 0;
+	tile->sprite_variant = 0;
 	if (rand() % 10 == 0)
 	{
-		tile->floor_decoration = 1 + rand() % 3;
+		tile->sprite_variant = 1 + rand() % 3;
 	}
 
 	tile->obj = (obj_t){.type = OBJ_NONE};
-	if (rand() % 3 == 0)
+	if (rand() % 10 == 0)
 	{
 		tile->obj.type = OBJ_TREE;
+	}
+	else if (rand() % 40 == 0)
+	{
+		tile->obj.type = OBJ_ROCK;
+		tile->obj.sprite_variant = rand() % 3;
 	}
 }
 
@@ -508,7 +514,7 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 	SDL_Rect rect = {.x = sc.x, .y = sc.y, .w = side, .h = side};
 	SDL_SetRenderDrawColor(g_renderer, 109, 216, 37, 255);
 	SDL_RenderFillRect(g_renderer, &rect);
-	sprite_t sprite = SPRITE_GRASSLAND_DECORATION_0 + tile->floor_decoration;
+	sprite_t sprite = SPRITE_GRASSLAND_DECORATION_0 + tile->sprite_variant;
 	draw_sprite(sprite, &rect);
 
 	/* Draw additional UI square around the tile. */
@@ -774,7 +780,7 @@ void map_generate(void)
 
 		if (rand() % 10 == 0)
 		{
-			tile->floor_decoration = 1 + rand() % 3;
+			tile->sprite_variant = 1 + rand() % 3;
 		}
 
 		tile->obj = (obj_t){0};
@@ -785,6 +791,7 @@ void map_generate(void)
 		else if (rand() % 13 == 3)
 		{
 			tile->obj.type = OBJ_ROCK;
+			tile->obj.sprite_variant = rand() % 3;
 		}
 		else if (rand() % 13 == 3)
 		{
