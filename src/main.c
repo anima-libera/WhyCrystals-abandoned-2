@@ -1384,6 +1384,9 @@ tc_t compute_fly_move(tc_t fly_tc, int recursion_budget, bool allow_random)
 	}
 }
 
+int g_enemy_count;
+int g_enemy_that_played_count;
+
 bool game_play_enemy(void)
 {
 	for (tc_iter_all_spiral_t it = tc_iter_all_spiral_init(g_crystal_tc);
@@ -1397,6 +1400,7 @@ bool game_play_enemy(void)
 			{
 				/* All an egg can do is hatch by chance. */
 				src_tile->obj.can_still_act = false;
+				g_enemy_that_played_count++;
 				if (rand() % 4 == 0)
 				{
 					src_tile->obj.type = OBJ_ENEMY_BLOB;
@@ -1420,6 +1424,7 @@ bool game_play_enemy(void)
 				if (!tc_in_map(dst_tc) || tc_eq(src_tc, dst_tc))
 				{
 					src_tile->obj.can_still_act = false;
+					g_enemy_that_played_count++;
 					return false;
 				}
 				tile_t* dst_tile = map_tile(dst_tc);
@@ -1427,6 +1432,7 @@ bool game_play_enemy(void)
 				if (!tile_is_walkable_by_fly(dst_tile))
 				{
 					src_tile->obj.can_still_act = false;
+					g_enemy_that_played_count++;
 					return false;
 				}
 
@@ -1435,6 +1441,7 @@ bool game_play_enemy(void)
 				g_motion.src = src_tc;
 				g_motion.dst = dst_tc;
 				src_tile->obj.can_still_act = false;
+				g_enemy_that_played_count++;
 				if (lay_egg)
 				{
 					g_motion.obj = (obj_t){.type = OBJ_ENEMY_EGG};
@@ -1478,6 +1485,9 @@ bool game_play_enemy(void)
 	return true;
 }
 
+int g_tower_count;
+int g_tower_that_played_count;
+
 void tower_shoot(tc_t tower_tc, tc_t target_tc, obj_type_t shot_type)
 {
 	g_motion.t = 0;
@@ -1489,6 +1499,7 @@ void tower_shoot(tc_t tower_tc, tc_t target_tc, obj_type_t shot_type)
 	/* Update the tower. */
 	tile_t* tower_tile = map_tile(tower_tc);
 	tower_tile->obj.can_still_act = false;
+	g_tower_that_played_count++;
 	assert(tower_tile->obj.ammo > 0);
 	tower_tile->obj.ammo--;
 }
@@ -1572,6 +1583,7 @@ bool game_play_towers(void)
 			}
 
 			tower_tile->obj.can_still_act = false;
+			g_tower_that_played_count++;
 			return false;
 		}
 	}
@@ -1589,6 +1601,8 @@ void start_enemy_phase(void)
 	map_clear_selected();
 	map_clear_can_still_act();
 
+	g_enemy_count = 0;
+	g_enemy_that_played_count = 0;
 	for (tc_iter_all_t it = tc_iter_all_init();
 		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
@@ -1596,6 +1610,7 @@ void start_enemy_phase(void)
 		if (obj_type_is_enemy(tile->obj.type))
 		{
 			tile->obj.can_still_act = true;
+			g_enemy_count++;
 		}
 	}
 }
@@ -1608,6 +1623,8 @@ void start_tower_phase(void)
 	map_clear_selected();
 	map_clear_can_still_act();
 
+	g_tower_count = 0;
+	g_tower_that_played_count = 0;
 	for (tc_iter_all_t it = tc_iter_all_init();
 		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
@@ -1615,6 +1632,7 @@ void start_tower_phase(void)
 		if (obj_type_is_tower(tile->obj.type) && tile->obj.ammo > 0)
 		{
 			tile->obj.can_still_act = true;
+			g_tower_count++;
 		}
 	}
 }
@@ -1642,6 +1660,23 @@ void start_player_phase(void)
 			tile->obj.can_still_act = true;
 		}
 	}
+}
+
+int g_act_token_count;
+
+void end_player_phase(void)
+{
+	for (tc_iter_all_t it = tc_iter_all_init();
+		tc_iter_all_cond(&it); tc_iter_all_next(&it))
+	{
+		tile_t* tile = map_tile(it.tc);
+		if (obj_type_is_unit(tile->obj.type) && tile->obj.can_still_act)
+		{
+			g_act_token_count++;
+		}
+	}
+
+	start_enemy_phase();
 }
 
 void game_perform(void)
@@ -1795,6 +1830,7 @@ int main(int argc, char const* const* argv)
 		}
 	}
 
+	g_act_token_count = 0;
 	g_turn = 0;
 	g_game_over = false;
 	start_player_phase();
@@ -1822,7 +1858,7 @@ int main(int argc, char const* const* argv)
 						case SDLK_SPACE:
 							if (g_phase == PHASE_PLAYER)
 							{
-								start_enemy_phase();
+								end_player_phase();
 							}
 						break;
 						case SDLK_c:
@@ -1855,7 +1891,7 @@ int main(int argc, char const* const* argv)
 				case SDL_MOUSEBUTTONDOWN:
 					if (event.button.button == SDL_BUTTON_MIDDLE && g_phase == PHASE_PLAYER)
 					{
-						start_enemy_phase();
+						end_player_phase();
 					}
 					if (g_phase == PHASE_PLAYER)
 					{
@@ -1882,6 +1918,18 @@ int main(int argc, char const* const* argv)
 		if (g_game_over)
 		{
 			DRAW_TEXT("GAME OVER");
+		}
+		else if (g_phase == PHASE_PLAYER)
+		{
+			DRAW_TEXT("AT %d", g_act_token_count);
+		}
+		else if (g_phase == PHASE_ENEMY)
+		{
+			DRAW_TEXT("ENEMY PHASE %d / %d", g_enemy_that_played_count, g_enemy_count);
+		}
+		else if (g_phase == PHASE_TOWERS)
+		{
+			DRAW_TEXT("TOWERS PHASE %d / %d", g_tower_that_played_count, g_tower_count);
 		}
 		if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LCTRL])
 		{
