@@ -514,13 +514,17 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 	/* Draw additional UI square around the tile. */
 	if (tile->is_selected)
 	{
-		SDL_SetRenderDrawColor(g_renderer, 255, 255, 255, 255);
-		SDL_RenderDrawRect(g_renderer, &rect);
+		SDL_SetRenderDrawColor(g_renderer, 255, 255, 255, 100);
+		SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
+		SDL_RenderFillRect(g_renderer, &rect);
+		SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_NONE);
 	}
 	else if (tile->is_hovered && !tile_has_options(tile))
 	{
-		SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
-		SDL_RenderDrawRect(g_renderer, &rect);
+		SDL_SetRenderDrawColor(g_renderer, 255, 255, 255, 60);
+		SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
+		SDL_RenderFillRect(g_renderer, &rect);
+		SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_NONE);
 	}
 	if (tile_has_options(tile))
 	{
