@@ -1544,6 +1544,8 @@ void tower_shoot(tc_t tower_tc, tc_t target_tc, obj_type_t shot_type)
 	tower_tile->obj.ammo--;
 }
 
+int g_tower_orientation;
+
 bool game_play_towers(void)
 {
 	for (tc_iter_all_spiral_t it = tc_iter_all_spiral_init(g_crystal_tc);
@@ -1563,13 +1565,16 @@ bool game_play_towers(void)
 				bool is_valid;
 			};
 			typedef struct dir_t dir_t;
-			dir_t dirs[4] = {
-				{.dx = 1, .dy = 0},
-				{.dx = -1, .dy = 0},
-				{.dx = 0, .dy = 1},
-				{.dx = 0, .dy = -1}};
+			dir_t dirs[4];
 			for (int i = 0; i < 4; i ++)
 			{
+				dirs[i] =
+					(dir_t[4]){
+						{.dx = 0, .dy = -1},
+						{.dx = 1, .dy = 0},
+						{.dx = 0, .dy = 1},
+						{.dx = -1, .dy = 0}
+					}[(g_tower_orientation + i) % 4];
 				dirs[i].tc = src_tc;
 				if (tower_type == OBJ_TOWER_YELLOW)
 				{
@@ -1686,6 +1691,14 @@ void start_player_phase(void)
 	}
 
 	g_turn++;
+	if (g_turn == 1)
+	{
+		g_tower_orientation = 0;
+	}
+	else
+	{
+		g_tower_orientation = (g_tower_orientation + 1) % 4;
+	}
 	g_phase = PHASE_PLAYER;
 	g_tower_available = true;
 	g_phase_time = 0;
@@ -1817,7 +1830,7 @@ void draw_crystal_spiral(void)
 		if (tc_dist(last_tc, it.tc) <= 2 && !tc_eq(it.tc, last_tc))
 		{
 			SDL_RenderDrawLine(g_renderer, last_sc.x, last_sc.y, sc.x, sc.y);
-			
+
 			/* Draw the order number on the last tile (and not on the current one)
 			 * to avoid the line from the current tile to the next to be drawn above
 			 * the text being drawn here. */
@@ -1994,6 +2007,16 @@ int main(int argc, char const* const* argv)
 		else if (g_phase == PHASE_PLAYER)
 		{
 			DRAW_TEXT("AT %d", g_act_token_count);
+			if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT])
+			{
+				char* orientation_texts[] = {"UP", "RIGHT", "DOWN", "LEFT"};
+				DRAW_TEXT("TOWER SCAN:");
+				DRAW_TEXT("%s -> %s -> %s -> %s",
+					orientation_texts[(g_tower_orientation + 0) % 4],
+					orientation_texts[(g_tower_orientation + 1) % 4],
+					orientation_texts[(g_tower_orientation + 2) % 4],
+					orientation_texts[(g_tower_orientation + 3) % 4]);
+			}
 		}
 		else if (g_phase == PHASE_ENEMY)
 		{
