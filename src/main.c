@@ -154,17 +154,26 @@ void tc_iter_all_spiral_next(tc_iter_all_spiral_t* it)
 	bool sync = tc_eq(it->center, it->tc);
 	while (true)
 	{
-		tc_t spiral_tc = {.x = it->center.x - dist, .y = it->center.y};
+		tc_t spiral_tc = dist == 0 ? it->center :
+			(tc_t){.x = it->center.x - dist + 1, .y = it->center.y - 1};
 		tc_t ring_end_tc = dist == 0 ? it->center :
-			(tc_t){.x = it->center.x - dist + 1, .y = it->center.y + 1};
+			(tc_t){.x = it->center.x - dist, .y = it->center.y};
 		bool ring_is_out = true;
 
-		struct dir_t { int dx, dy; };
+		struct dir_t
+		{
+			int dx, dy;
+			int length;
+		};
 		typedef struct dir_t dir_t;
-		dir_t dirs[] = {{1, -1}, {1, 1}, {-1, 1}, {-1, -1}};
+		dir_t dirs[] = {
+			{.dx = 1,  .dy = -1, .length = dist - 1},
+			{.dx = 1,  .dy = 1,  .length = dist},
+			{.dx = -1, .dy = 1,  .length = dist},
+			{.dx = -1, .dy = -1, .length = dist + 1}};
 		for (int i = 0; i < 4; i++)
 		{
-			for (int j = 0; j < dist || dist == 0; j++)
+			for (int j = dist - dirs[i].length; j < dist || dist == 0; j++)
 			{
 				if (tc_in_map(spiral_tc))
 				{
@@ -178,7 +187,7 @@ void tc_iter_all_spiral_next(tc_iter_all_spiral_t* it)
 				if (tc_eq(spiral_tc, ring_end_tc))
 				{
 					/* Going to the next ring. */
-					spiral_tc = (tc_t){.x = it->center.x - (dist+1), .y = it->center.y};
+					spiral_tc = (tc_t){.x = it->center.x - dist, .y = it->center.y - 1};
 				}
 				else
 				{
@@ -239,6 +248,13 @@ sc_t tc_to_sc(tc_t tc)
 		tc.y * g_tile_side_pixels + g_tc_sc_offset.y};
 }
 
+sc_t tc_to_sc_center(tc_t tc)
+{
+	return (sc_t){
+		tc.x * g_tile_side_pixels + g_tc_sc_offset.x + g_tile_side_pixels / 2,
+		tc.y * g_tile_side_pixels + g_tc_sc_offset.y + g_tile_side_pixels / 2};
+}
+
 tc_t sc_to_tc(sc_t sc)
 {
 	tc_t tc = {
@@ -261,7 +277,9 @@ struct rgb_t
 };
 typedef struct rgb_t rgb_t;
 
-void draw_text(char const* text, rgb_t color, sc_t sc)
+void draw_text_ex(char const* text, rgb_t color,
+	sc_t sc, bool center_x, bool center_y,
+	bool bg, rgb_t bg_color)
 {
 	SDL_Color sdl_color = {.r = color.r, .g = color.g, .b = color.b, .a = 255};
 	SDL_Surface* surface = TTF_RenderText_Solid(g_font, text, sdl_color);
@@ -271,8 +289,30 @@ void draw_text(char const* text, rgb_t color, sc_t sc)
 	SDL_FreeSurface(surface);
 	SDL_Rect rect = {.x = sc.x, .y = sc.y};
 	SDL_QueryTexture(texture, NULL, NULL, &rect.w, &rect.h);
+	if (center_x)
+	{
+		rect.x -= rect.w / 2;
+	}
+	if (center_y)
+	{
+		rect.y -= rect.h / 2;
+	}
+	if (bg)
+	{
+		SDL_Rect visual_rect = rect;
+		visual_rect.y += 4;
+		visual_rect.w += 1;
+		visual_rect.h -= 8;
+		SDL_SetRenderDrawColor(g_renderer, bg_color.r, bg_color.g, bg_color.b, 255);
+		SDL_RenderFillRect(g_renderer, &visual_rect);
+	}
 	SDL_RenderCopy(g_renderer, texture, NULL, &rect);
 	SDL_DestroyTexture(texture);
+}
+
+void draw_text(char const* text, rgb_t color, sc_t sc)
+{
+	draw_text_ex(text, color, sc, false, false, false, (rgb_t){0});
 }
 
 enum obj_type_t
@@ -1764,6 +1804,33 @@ void center_view(tc_t tc)
 	g_tc_sc_offset.y -= sc.y + g_tile_side_pixels / 2 - g_window_h / 2;
 }
 
+void draw_crystal_spiral(void)
+{
+	tc_t last_tc = g_crystal_tc;
+	sc_t last_sc = tc_to_sc_center(last_tc);
+	int order = 0;
+	SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
+	for (tc_iter_all_spiral_t it = tc_iter_all_spiral_init(g_crystal_tc);
+		tc_iter_all_spiral_cond(&it); tc_iter_all_spiral_next(&it))
+	{
+		sc_t sc = tc_to_sc_center(it.tc);
+		if (tc_dist(last_tc, it.tc) <= 2 && !tc_eq(it.tc, last_tc))
+		{
+			SDL_RenderDrawLine(g_renderer, last_sc.x, last_sc.y, sc.x, sc.y);
+			
+			/* Draw the order number on the last tile (and not on the current one)
+			 * to avoid the line from the current tile to the next to be drawn above
+			 * the text being drawn here. */
+			char string[20];
+			sprintf(string, "%d", order);
+			draw_text_ex(string, (rgb_t){100, 255, 255}, last_sc, true, true, true, (rgb_t){0, 0, 0});
+			order++;
+		}
+		last_tc = it.tc;
+		last_sc = sc;
+	}
+}
+
 int main(int argc, char const* const* argv)
 {
 	printf("Why Crystals ? version 0.0.4 indev\n");
@@ -1908,6 +1975,11 @@ int main(int argc, char const* const* argv)
 		
 		draw_map();
 
+		if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LSHIFT])
+		{
+			draw_crystal_spiral();
+		}
+
 		char string[200];
 		int y = 0;
 		#define DRAW_TEXT(...) \
@@ -1937,12 +2009,13 @@ int main(int argc, char const* const* argv)
 			DRAW_TEXT("LEFT-CLICK: SELECT TILE");
 			DRAW_TEXT("LEFT-CLICK ON AVAILABLE TILE: PERFORM SELECTED ACTION");
 			DRAW_TEXT("WHEEL ON AVAILABLE TILE: CHANGE SELECTED ACTION");
-			DRAW_TEXT("LEFT-ALT: DISPLAY INFO");
-			DRAW_TEXT("LEFT-CONTROL: DISPLAY CONTROLS");
+			DRAW_TEXT("HOLD LEFT-ALT: DISPLAY INFO");
+			DRAW_TEXT("HOLD LEFT-CONTROL: DISPLAY CONTROLS");
 			DRAW_TEXT("C KEY: CENTER VIEW ON CRYSTAL");
 			DRAW_TEXT("WHEEL: ZOOM (PIXEL PERFECT)");
 			DRAW_TEXT("WHEEL + LEFT-CONTROL: ZOOM (SLOW)");
 			DRAW_TEXT("WHEEL BUTTON / SPACE: END TURN");
+			DRAW_TEXT("HOLD LEFT-SHIFT: DISPLAY CRYSTAL ORDER FIELD");
 			DRAW_TEXT("ESCAPE: QUIT");
 		}
 		#undef DRAW_TEXT
