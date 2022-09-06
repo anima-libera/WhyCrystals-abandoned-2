@@ -1766,7 +1766,7 @@ void center_view(tc_t tc)
 
 int main(int argc, char const* const* argv)
 {
-	printf("Why Crystals ? version 0.0.3 indev\n");
+	printf("Why Crystals ? version 0.0.4 indev\n");
 
 	bool test_big = false;
 	for (int i = 1; i < argc; i++)

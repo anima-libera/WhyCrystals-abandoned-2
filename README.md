@@ -1,11 +1,11 @@
 
 # Why Crystals ?
 
-*Why Crystals* is an indie grid-based turn-based strategy tower defense game, currently in very early development.
+*Why Crystals* is an indie grid-based turn-based tactics tower defense game, currently in very early development.
 
 Here is what it looks like for now:
 
-<img src="pics/screen_indev_01.png" width="319px" height="257px" />
+<img src="pics/screen_indev_02.png" width="485px" height="483px" />
 
 It is not fun yet, come back later!
 
