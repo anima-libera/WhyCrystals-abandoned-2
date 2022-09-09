@@ -1774,7 +1774,7 @@ void game_perform(void)
 						g_motion.src.y > g_motion.dst.y ? -1 :
 						0;
 					tc_t tc = g_motion.dst;
-					for (int i = 0; i < 3; i++)
+					for (int i = 0; i < 2; i++)
 					{
 						tile_t* tile = map_tile(tc);
 						if (tile->obj.type == OBJ_NONE)
