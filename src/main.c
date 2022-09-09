@@ -1746,8 +1746,9 @@ void game_perform(void)
 				g_game_over = true;
 				printf("Crystal destroyed, game over on turn %d\n", g_turn);
 			}
-			if (g_motion.obj.type == OBJ_SHOT_BLUE)
+			if (g_motion.obj.type == OBJ_SHOT_BLUE || g_motion.obj.type == OBJ_SHOT_RED)
 			{
+				/* Doing damage to the impacted tile, often killing its content. */
 				if (dst_tile->obj.type == OBJ_ENEMY_LEGS)
 				{
 					dst_tile->obj.life--;
@@ -1760,20 +1761,29 @@ void game_perform(void)
 				{
 					dst_tile->obj = (obj_t){0};
 				}
-			}
-			else if (g_motion.obj.type == OBJ_SHOT_RED)
-			{
-				if (dst_tile->obj.type == OBJ_ENEMY_LEGS)
+
+				if (g_motion.obj.type == OBJ_SHOT_RED)
 				{
-					dst_tile->obj.life--;
-					if (dst_tile->obj.life <= 0)
+					/* Try placing red blob on tiles on and after the impact. */
+					int dx =
+						g_motion.src.x < g_motion.dst.x ? 1 :
+						g_motion.src.x > g_motion.dst.x ? -1 :
+						0;
+					int dy =
+						g_motion.src.y < g_motion.dst.y ? 1 :
+						g_motion.src.y > g_motion.dst.y ? -1 :
+						0;
+					tc_t tc = g_motion.dst;
+					for (int i = 0; i < 3; i++)
 					{
-						dst_tile->obj = (obj_t){.type = OBJ_BLOB_RED};
+						tile_t* tile = map_tile(tc);
+						if (tile->obj.type == OBJ_NONE)
+						{
+							tile->obj.type = OBJ_BLOB_RED;
+						}
+						tc.x += dx;
+						tc.y += dy;
 					}
-				}
-				else
-				{
-					dst_tile->obj = (obj_t){.type = OBJ_BLOB_RED};
 				}
 			}
 			else
