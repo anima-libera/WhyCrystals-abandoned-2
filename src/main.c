@@ -2009,13 +2009,17 @@ int main(int argc, char const* const* argv)
 			DRAW_TEXT("AT %d", g_act_token_count);
 			if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT])
 			{
-				char* orientation_texts[] = {"UP", "RIGHT", "DOWN", "LEFT"};
+				sprite_t orientation_sprites[] = {
+					SPRITE_ARROW_UP, SPRITE_ARROW_RIGHT, SPRITE_ARROW_DOWN, SPRITE_ARROW_LEFT};
 				DRAW_TEXT("TOWER SCAN:");
-				DRAW_TEXT("%s -> %s -> %s -> %s",
-					orientation_texts[(g_tower_orientation + 0) % 4],
-					orientation_texts[(g_tower_orientation + 1) % 4],
-					orientation_texts[(g_tower_orientation + 2) % 4],
-					orientation_texts[(g_tower_orientation + 3) % 4]);
+				SDL_Rect rect = {.x = 5, .y = y, .w = 32, .h = 32};
+				for (int i = 0; i < 4; i++)
+				{
+					sprite_t sprite = orientation_sprites[(g_tower_orientation + i) % 4];
+					draw_sprite(sprite, &rect);
+					rect.x += 32 + 5;
+				}
+				y += rect.h + 5;
 			}
 		}
 		else if (g_phase == PHASE_ENEMY)

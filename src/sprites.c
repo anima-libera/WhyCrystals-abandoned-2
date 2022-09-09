@@ -40,6 +40,10 @@ static sprite_ref_t s_sprite_rect_table[] = {
 	[SPRITE_ENEMY_EGG] =        {1, R16(7, 2, 1, 1)},
 	[SPRITE_ENEMY_BLOB] =       {1, R16(4, 2, 1, 1)},
 	[SPRITE_ENEMY_LEGS] =       {1, R16(5, 2, 1, 1)},
+	[SPRITE_ARROW_UP] =         {1, R16(2, 7, 1, 1)},
+	[SPRITE_ARROW_RIGHT] =      {1, R16(3, 7, 1, 1)},
+	[SPRITE_ARROW_DOWN] =       {1, R16(4, 7, 1, 1)},
+	[SPRITE_ARROW_LEFT] =       {1, R16(5, 7, 1, 1)},
 	#undef R16
 };
 
