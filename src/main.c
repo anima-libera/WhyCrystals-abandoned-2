@@ -413,7 +413,7 @@ enum option_t
 	OPTION_TOWER_YELLOW,
 	OPTION_TOWER_BLUE,
 
-	OPTION_NUMBER,
+	OPTION_NUMBER
 };
 typedef enum option_t option_t;
 
@@ -957,14 +957,27 @@ tc_t map_tile_tc(tile_t* tile)
 	assert(false);
 }
 
+sc_t g_mouse_sc;
+
+bool g_shop_is_open;
+void update_shop_entry_hovered(void);
+
 void handle_mouse_motion(sc_t sc)
 {
-	/* Update the hovered tile. */
-	map_clear_hovered();
-	tile_t* tile = map_tile(sc_to_tc(sc));
-	if (tile != NULL)
+	g_mouse_sc = sc;
+	if (g_shop_is_open)
 	{
-		tile->is_hovered = true;
+		update_shop_entry_hovered();
+	}
+	else
+	{
+		/* Update the hovered tile. */
+		map_clear_hovered();
+		tile_t* tile = map_tile(sc_to_tc(sc));
+		if (tile != NULL)
+		{
+			tile->is_hovered = true;
+		}
 	}
 }
 
@@ -1058,8 +1071,16 @@ bool obj_type_is_unit(obj_type_t type)
 	}
 }
 
+void shop_click(void);
+
 void handle_mouse_click(bool is_left_click)
 {
+	if (g_shop_is_open)
+	{
+		shop_click();
+		return;
+	}
+
 	tile_t* old_selected = map_selected_tile();
 
 	/* Update the selected tile. */
@@ -1165,8 +1186,16 @@ void handle_mouse_click(bool is_left_click)
 	}
 }
 
+int g_shop_scroll;
+
 void handle_mouse_wheel(int wheel_motion)
 {
+	if (g_shop_is_open)
+	{
+		g_shop_scroll += wheel_motion * 30;
+		return;
+	}
+
 	/* The wheel is usually to zoom, but may be used to select an option
 	 * on available tiles. */
 	if (tile_has_options(map_hovered_tile()))
@@ -1175,7 +1204,7 @@ void handle_mouse_wheel(int wheel_motion)
 		return;
 	}
 
-	/* Zoom it is. */
+	/* It seems that we have to zoom on the map then. */
 
 	/* Save the precise position in the map (tc coordinate space)
 	 * where the mouse is pointing (before zooming) so that we can
@@ -1717,8 +1746,15 @@ void start_player_phase(void)
 
 int g_act_token_count;
 
+void close_shop(void);
+
 void end_player_phase(void)
 {
+	if (g_shop_is_open)
+	{
+		close_shop();
+	}
+
 	for (tc_iter_all_t it = tc_iter_all_init();
 		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
@@ -1846,12 +1882,136 @@ void draw_crystal_spiral(void)
 			 * the text being drawn here. */
 			char string[20];
 			sprintf(string, "%d", order);
-			draw_text_ex(string, (rgb_t){100, 255, 255}, last_sc, true, true, true, (rgb_t){0, 0, 0});
+			draw_text_ex(string, (rgb_t){100, 255, 255},
+				last_sc, true, true,
+				true, (rgb_t){0, 0, 0});
 			order++;
 		}
 		last_tc = it.tc;
 		last_sc = sc;
 	}
+}
+
+enum shop_entry_t
+{
+	SHOP_ENTRY_TEST_1,
+	SHOP_ENTRY_TEST_2,
+
+	SHOP_ENTRY_NUMBER
+};
+typedef enum shop_entry_t shop_entry_t; 
+
+struct shop_entry_def_t
+{
+	int cost;
+	char* name;
+	char* description;
+};
+typedef struct shop_entry_def_t shop_entry_def_t;
+
+SDL_Rect shop_entry_rect(shop_entry_t entry)
+{
+	int y = g_shop_scroll + 60 + 40 * entry;
+	return (SDL_Rect){.x = 60, .y = y, .w = g_window_w - 120, .h = 35};
+}
+
+/* Which shop entry is hovered.
+ * Set to -1 when no shop entry is hovered. */
+int g_shop_entry_hovered;
+
+void update_shop_entry_hovered(void)
+{
+	for (int i = 0; i < SHOP_ENTRY_NUMBER; i++)
+	{
+		SDL_Rect rect = shop_entry_rect(i);
+		if (rect.x <= g_mouse_sc.x && g_mouse_sc.x < rect.x + rect.w &&
+			rect.y <= g_mouse_sc.y && g_mouse_sc.y < rect.y + rect.h)
+		{
+			g_shop_entry_hovered = i;
+			return;
+		}
+	}
+	g_shop_entry_hovered = -1;
+}
+
+void draw_shop_entry(shop_entry_def_t* def, shop_entry_t entry)
+{
+	SDL_Rect rect = shop_entry_rect(entry);
+	SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
+	SDL_RenderFillRect(g_renderer, &rect);
+
+	sc_t sc = {.x = rect.x + 5, .y = rect.y + 5};
+	rgb_t color = g_shop_entry_hovered == (int)entry ?
+		(rgb_t){255, 255, 0} :
+		(rgb_t){255, 255, 255};
+	draw_text(def->name, color, sc);
+
+	sc.x = rect.x + rect.w - 80;
+	char string[30];
+	sprintf(string, "%d", def->cost);
+	color = g_shop_entry_hovered == (int)entry ?
+		def->cost > g_act_token_count ? (rgb_t){255, 0, 0} : (rgb_t){0, 255, 0} :
+		(rgb_t){255, 255, 255};
+	draw_text(string, color, sc);
+}
+
+shop_entry_def_t g_shop_table[] = {
+	[SHOP_ENTRY_TEST_1] = {.cost = 3, .name = "TEST 1"},
+	[SHOP_ENTRY_TEST_2] = {.cost = 5, .name = "TEST 2"}};
+
+void draw_shop(void)
+{
+	for (int i = 0; i < SHOP_ENTRY_NUMBER; i++)
+	{
+		draw_shop_entry(&g_shop_table[i], i);
+	}
+}
+
+void shop_click(void)
+{
+	assert(g_shop_is_open);
+
+	if (g_shop_entry_hovered == -1)
+	{
+		close_shop();
+		return;
+	}
+
+	switch (g_shop_entry_hovered)
+	{
+		case SHOP_ENTRY_TEST_1:
+			printf("test 1\n");
+		break;
+		case SHOP_ENTRY_TEST_2:
+			printf("test 2\n");
+		break;
+		default:
+			assert(false);
+		break;
+	}
+
+	g_act_token_count -= g_shop_table[g_shop_entry_hovered].cost;
+}
+
+void open_shop(void)
+{
+	if (g_game_over)
+	{
+		return;
+	}
+
+	map_clear_hovered();
+	g_shop_is_open = true;
+	update_shop_entry_hovered();
+}
+
+void close_shop(void)
+{
+	g_shop_is_open = false;
+
+	/* Make the actually hovered tile marked as hovered again without requiring
+	 * the mouse to be moved. */
+	handle_mouse_motion(g_mouse_sc);
 }
 
 int main(int argc, char const* const* argv)
@@ -1920,6 +2080,9 @@ int main(int argc, char const* const* argv)
 		}
 	}
 
+	g_shop_is_open = false;
+	g_shop_scroll = 0;
+
 	g_act_token_count = 0;
 	g_turn = 0;
 	g_game_over = false;
@@ -1945,7 +2108,7 @@ int main(int argc, char const* const* argv)
 						case SDLK_ESCAPE:
 							running = false;
 						break;
-						case SDLK_SPACE:
+						case SDLK_RETURN:
 							if (g_phase == PHASE_PLAYER)
 							{
 								end_player_phase();
@@ -1953,6 +2116,16 @@ int main(int argc, char const* const* argv)
 						break;
 						case SDLK_c:
 							center_view(g_crystal_tc);
+						break;
+						case SDLK_SPACE:
+							if (g_shop_is_open)
+							{
+								close_shop();
+							}
+							else
+							{
+								open_shop();
+							}
 						break;
 					}
 				break;
@@ -2051,11 +2224,17 @@ int main(int argc, char const* const* argv)
 			DRAW_TEXT("C KEY: CENTER VIEW ON CRYSTAL");
 			DRAW_TEXT("WHEEL: ZOOM (PIXEL PERFECT)");
 			DRAW_TEXT("WHEEL + LEFT-CONTROL: ZOOM (SLOW)");
-			DRAW_TEXT("WHEEL BUTTON / SPACE: END TURN");
+			DRAW_TEXT("WHEEL BUTTON / ENTER: END TURN");
+			DRAW_TEXT("SPACE: TOGGLE SHOP");
 			DRAW_TEXT("HOLD LEFT-SHIFT: DISPLAY CRYSTAL ORDER FIELD");
 			DRAW_TEXT("ESCAPE: QUIT");
 		}
 		#undef DRAW_TEXT
+
+		if (g_shop_is_open)
+		{
+			draw_shop();
+		}
 		
 		SDL_RenderPresent(g_renderer);
 		g_time++;
