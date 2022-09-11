@@ -324,6 +324,7 @@ enum obj_type_t
 	OBJ_UNIT_BASIC,
 	OBJ_UNIT_WALKER,
 	OBJ_UNIT_SHROOM,
+	OBJ_UNIT_DASH,
 	OBJ_TOWER_YELLOW,
 	OBJ_TOWER_BLUE,
 	OBJ_SHOT_BLUE,
@@ -362,6 +363,7 @@ void draw_obj(obj_t const* obj, sc_t sc, int side)
 		case OBJ_UNIT_WALKER:  sprite = SPRITE_UNIT_WALKER;  break;
 		case OBJ_UNIT_BASIC:   sprite = SPRITE_UNIT_BASIC;   break;
 		case OBJ_UNIT_SHROOM:  sprite = SPRITE_UNIT_SHROOM;  break;
+		case OBJ_UNIT_DASH:    sprite = SPRITE_UNIT_DASH;  break;
 		case OBJ_TOWER_YELLOW: sprite = SPRITE_TOWER_YELLOW; break;
 		case OBJ_TOWER_BLUE:   sprite = SPRITE_TOWER_BLUE;   break;
 		case OBJ_SHOT_BLUE:    sprite = SPRITE_SHOT_BLUE;    break;
@@ -711,6 +713,8 @@ bool tc_in_map(tc_t tc)
 	return false;
 }
 
+bool g_some_chunks_are_new = false;
+
 tile_t* map_tile(tc_t tc)
 {
 	/* Search in the already generated chunks first. */
@@ -727,10 +731,17 @@ tile_t* map_tile(tc_t tc)
 	}
 	/* It seems that the requested tile was not generated yet,
 	 * so we generate the chunk that contains it now. */
+	g_some_chunks_are_new = true;
 	DA_LENGTHEN(g_chunk_da_len += 1, g_chunk_da_cap, g_chunk_da, chunk_t);
 	chunk_t* chunk = &g_chunk_da[g_chunk_da_len-1];
 	chunk->top_left_tc.x = tc.x - cool_mod(tc.x, CHUNK_SIDE);
 	chunk->top_left_tc.y = tc.y - cool_mod(tc.y, CHUNK_SIDE);
+	#if 0
+	printf("Generate chunk (%d~%d, %d~%d) for tile (%d, %d)\n",
+		chunk->top_left_tc.x, chunk->top_left_tc.x + CHUNK_SIDE - 1,
+		chunk->top_left_tc.y, chunk->top_left_tc.y + CHUNK_SIDE - 1,
+		tc.x, tc.y);
+	#endif
 	chunk->tiles = calloc(CHUNK_SIDE * CHUNK_SIDE, sizeof(tile_t));
 	for (int i = 0; i < CHUNK_SIDE * CHUNK_SIDE; i++)
 	{
@@ -845,14 +856,28 @@ void map_generate(void)
 		rand() % 5 - 2};
 	map_tile(g_crystal_tc)->obj = (obj_t){.type = OBJ_CRYSTAL};
 
+	/* Choose the 3 different unit types at random, by random elimination. */
+	obj_type_t unit_types[] = {
+		OBJ_UNIT_WALKER,
+		OBJ_UNIT_BASIC,
+		OBJ_UNIT_SHROOM,
+		OBJ_UNIT_DASH};
+	int unit_type_count = sizeof unit_types / sizeof (obj_type_t);
+	while (unit_type_count > 3)
+	{
+		int eliminated_index = rand() % unit_type_count;
+		unit_types[eliminated_index] = unit_types[unit_type_count - 1];
+		unit_type_count--;
+	}
+
 	/* Place the 3 units around the crystal. */
 	tc_t tc;
 	tc = g_crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) += 1;
-	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_WALKER};
+	map_tile(tc)->obj = (obj_t){.type = unit_types[0]};
 	tc = g_crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) -= 1;
-	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_BASIC};
+	map_tile(tc)->obj = (obj_t){.type = unit_types[1]};
 	tc = g_crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) += rand() % 2 ? 2 : -2;
-	map_tile(tc)->obj = (obj_t){.type = OBJ_UNIT_SHROOM};
+	map_tile(tc)->obj = (obj_t){.type = unit_types[2]};
 
 	/* Also place a tower near the crystal. */
 	tc = g_crystal_tc; tc.x += rand() % 2 ? 1 : -1; tc.y += rand() % 2 ? 1 : -1;
@@ -1065,6 +1090,7 @@ bool obj_type_is_unit(obj_type_t type)
 		case OBJ_UNIT_WALKER:
 		case OBJ_UNIT_BASIC:
 		case OBJ_UNIT_SHROOM:
+		case OBJ_UNIT_DASH:
 			return true;
 		default:
 			return false;
@@ -1072,6 +1098,86 @@ bool obj_type_is_unit(obj_type_t type)
 }
 
 void shop_click(void);
+
+void update_selected_unit_options(tc_t unit_tc)
+{
+	map_clear_options();
+
+	tile_t* unit_tile = map_tile(unit_tc);
+	g_selected_option_index = 0;
+
+	/* Handle the walking for the dash unit. */
+	if (unit_tile->obj.type == OBJ_UNIT_DASH)
+	{
+		struct dir_t
+		{
+			int dx, dy;
+		};
+		typedef struct dir_t dir_t;
+		dir_t dirs[4] = {
+			{0, -1},
+			{1, 0},
+			{0, 1},
+			{-1, 0}};
+		for (int i = 0; i < 4; i++)
+		{
+			/* This dash unit can dash in a direction if there is an obstacle behind. */
+			tc_t behind_tc = unit_tc;
+			behind_tc.x -= dirs[i].dx;
+			behind_tc.y -= dirs[i].dy;
+			if (map_tile(behind_tc)->obj.type != OBJ_NONE)
+			{
+				tc_t tc = unit_tc;
+				while (true)
+				{
+					tc.x += dirs[i].dx;
+					tc.y += dirs[i].dy;
+					if (!tc_in_map(tc))
+					{
+						break;
+					}
+					tile_t* tile = map_tile(tc);
+					if (tile->obj.type != OBJ_NONE)
+					{
+						break;
+					}
+					tile->options[OPTION_WALK] = true;
+				}
+			}
+		}
+	}
+
+	int walk_dist = 
+		unit_tile->obj.type == OBJ_UNIT_WALKER ? 4 :
+		unit_tile->obj.type == OBJ_UNIT_BASIC ? 3 :
+		unit_tile->obj.type == OBJ_UNIT_SHROOM ? 2 :
+		unit_tile->obj.type == OBJ_UNIT_DASH ? 0 : /* Handled above. */
+		(assert(false), 0);
+	int tower_dist =
+		unit_tile->obj.type == OBJ_UNIT_WALKER ? 1 :
+		unit_tile->obj.type == OBJ_UNIT_BASIC ? 2 :
+		unit_tile->obj.type == OBJ_UNIT_SHROOM ? 3 :
+		unit_tile->obj.type == OBJ_UNIT_DASH ? 1 :
+		(assert(false), 0);
+	int const radius = max(walk_dist, tower_dist);
+	for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect(unit_tc, radius));
+		tc_iter_rect_cond(&it); tc_iter_rect_next(&it))
+	{
+		if (tc_eq(unit_tc, it.tc))
+		{
+			continue;
+		}
+		tile_t* tile = map_tile(it.tc);
+		tile->options[OPTION_WALK] |=
+			path_exists(unit_tc, it.tc, walk_dist);
+		tile->options[OPTION_TOWER_YELLOW] |=
+			g_tower_available &&
+			path_exists(unit_tc, it.tc, tower_dist);
+		tile->options[OPTION_TOWER_BLUE] |=
+			g_tower_available &&
+			path_exists(unit_tc, it.tc, tower_dist);
+	}
+}
 
 void handle_mouse_click(bool is_left_click)
 {
@@ -1152,37 +1258,7 @@ void handle_mouse_click(bool is_left_click)
 		new_selected->obj.can_still_act &&
 		is_left_click)
 	{
-		g_selected_option_index = 0;
-		int walk_dist = 
-			new_selected->obj.type == OBJ_UNIT_WALKER ? 4 :
-			new_selected->obj.type == OBJ_UNIT_BASIC ? 3 :
-			new_selected->obj.type == OBJ_UNIT_SHROOM ? 2 :
-			(assert(false), 0);
-		int tower_dist =
-			new_selected->obj.type == OBJ_UNIT_WALKER ? 1 :
-			new_selected->obj.type == OBJ_UNIT_BASIC ? 2 :
-			new_selected->obj.type == OBJ_UNIT_SHROOM ? 3 :
-			(assert(false), 0);
-		/* A unit that can still act is selected, accessible tiles
-		 * have to be flagged as walkable. */
-		tc_t const selected_tc = map_tile_tc(new_selected);
-		int const radius = max(walk_dist, tower_dist);
-		for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect(selected_tc, radius));
-			tc_iter_rect_cond(&it); tc_iter_rect_next(&it))
-		{
-			if (tc_eq(selected_tc, it.tc))
-			{
-				continue;
-			}
-			map_tile(it.tc)->options[OPTION_WALK] =
-				path_exists(selected_tc, it.tc, walk_dist);
-			map_tile(it.tc)->options[OPTION_TOWER_YELLOW] =
-				g_tower_available &&
-				path_exists(selected_tc, it.tc, tower_dist);
-			map_tile(it.tc)->options[OPTION_TOWER_BLUE] =
-				g_tower_available &&
-				path_exists(selected_tc, it.tc, tower_dist);
-		}
+		update_selected_unit_options(map_tile_tc(new_selected));
 	}
 }
 
@@ -2165,6 +2241,23 @@ int main(int argc, char const* const* argv)
 		}
 
 		game_perform();
+
+		if (g_some_chunks_are_new)
+		{
+			g_some_chunks_are_new = false;
+
+			/* When new chunks are generated, it can be useful to recompute the options
+			 * of the selected unit (if any). For example, there is no limit to the range
+			 * of the dash unit, so it may be able to move in the newly generated chunks
+			 * (but they were not generated yet when making the walkable tiles). */
+			tile_t* selected_tile = map_selected_tile();
+			if (selected_tile != NULL &&
+				obj_type_is_unit(selected_tile->obj.type) &&
+				selected_tile->obj.can_still_act)
+			{
+				update_selected_unit_options(map_tile_tc(selected_tile));
+			}
+		}
 
 		SDL_SetRenderDrawColor(g_renderer, 30, 40, 80, 255);
 		SDL_RenderClear(g_renderer);
