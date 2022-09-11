@@ -1415,7 +1415,7 @@ void spawn_one_enemy(obj_type_t type)
 	tc_t spawn_location_src = g_crystal_tc;
 	tc_t spawn_location_dst = g_crystal_tc;
 	while (tc_dist(spawn_location_dst, g_crystal_tc) < spawn_distance ||
-		obj_type_is_enemy(map_tile(spawn_location_dst)->obj.type))
+		map_tile(spawn_location_dst)->obj.type != OBJ_NONE)
 	{
 		spawn_location_dst = spawn_location_src;
 		if (rand() % 2 == 0)
