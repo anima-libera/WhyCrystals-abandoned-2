@@ -17,11 +17,6 @@
 #define BINARY /* Escapes the file content as an array of bytes. */
 #define SIZE /* Just produces the size in bytes of the file content, as an integer literal. */
 
-EMBEDDED("../assets/test", TEXT) char const g_asset_test[];
-
-EMBEDDED("../assets/sprite_sheet.png", BINARY) unsigned char const g_asset_sprite_sheet_png[];
-EMBEDDED("../assets/sprite_sheet.png", SIZE) unsigned int const g_asset_sprite_sheet_png_size;
-
 EMBEDDED("../assets/sprite_sheet_2.png", BINARY) unsigned char const g_asset_sprite_sheet_2_png[];
 EMBEDDED("../assets/sprite_sheet_2.png", SIZE) unsigned int const g_asset_sprite_sheet_2_png_size;
 

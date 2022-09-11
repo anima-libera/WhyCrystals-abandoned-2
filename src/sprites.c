@@ -51,23 +51,12 @@ static sprite_ref_t s_sprite_rect_table[] = {
 
 void init_sprite_sheet(void)
 {
-	/* Sprite sheet 1 (legacy, could be removed). */
+	/* Sprite sheet 2 (the sprite sheet 1 was removed). */
 	SDL_RWops* rwops_png = SDL_RWFromConstMem(
-		g_asset_sprite_sheet_png,
-		g_asset_sprite_sheet_png_size);
-	assert(rwops_png != NULL);
-	SDL_Surface* surface = IMG_LoadPNG_RW(rwops_png);
-	assert(surface != NULL);
-	s_sprite_sheet_texture_table[0] = SDL_CreateTextureFromSurface(g_renderer, surface);
-	assert(s_sprite_sheet_texture_table[0] != NULL);
-	SDL_FreeSurface(surface);
-
-	/* Sprite sheet 2. */
-	rwops_png = SDL_RWFromConstMem(
 		g_asset_sprite_sheet_2_png,
 		g_asset_sprite_sheet_2_png_size);
 	assert(rwops_png != NULL);
-	surface = IMG_LoadPNG_RW(rwops_png);
+	SDL_Surface* surface = IMG_LoadPNG_RW(rwops_png);
 	assert(surface != NULL);
 	s_sprite_sheet_texture_table[1] = SDL_CreateTextureFromSurface(g_renderer, surface);
 	assert(s_sprite_sheet_texture_table[1] != NULL);
