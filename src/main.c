@@ -325,10 +325,15 @@ enum obj_type_t
 	OBJ_UNIT_WALKER,
 	OBJ_UNIT_SHROOM,
 	OBJ_UNIT_DASH,
+	/* Shoots blue shots but not on an adjacent tile. */
 	OBJ_TOWER_YELLOW,
+	/* Shoots red shots. */
 	OBJ_TOWER_BLUE,
+	/* Makes anything on an adjacent tile be able to act
+	 * as many times as it can and wants. */
 	OBJ_MACHINE_MULTIACT,
 	OBJ_SHOT_BLUE,
+	/* Spills red blob on impact. */
 	OBJ_SHOT_RED,
 	OBJ_BLOB_RED,
 	OBJ_ENEMY_EGG,
