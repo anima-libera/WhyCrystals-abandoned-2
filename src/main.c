@@ -327,6 +327,7 @@ enum obj_type_t
 	OBJ_UNIT_DASH,
 	OBJ_TOWER_YELLOW,
 	OBJ_TOWER_BLUE,
+	OBJ_MACHINE_MULTIACT,
 	OBJ_SHOT_BLUE,
 	OBJ_SHOT_RED,
 	OBJ_BLOB_RED,
@@ -356,22 +357,23 @@ void draw_obj(obj_t const* obj, sc_t sc, int side)
 	bool tall_sprite = false;
 	switch (obj->type)
 	{
-		case OBJ_NONE:         return;
-		case OBJ_ROCK:         sprite = SPRITE_ROCK_1 + obj->sprite_variant;     break;
-		case OBJ_TREE:         sprite = SPRITE_TREE;         tall_sprite = true; break;
-		case OBJ_CRYSTAL:      sprite = SPRITE_CRYSTAL;      tall_sprite = true; break;
-		case OBJ_UNIT_WALKER:  sprite = SPRITE_UNIT_WALKER;  break;
-		case OBJ_UNIT_BASIC:   sprite = SPRITE_UNIT_BASIC;   break;
-		case OBJ_UNIT_SHROOM:  sprite = SPRITE_UNIT_SHROOM;  break;
-		case OBJ_UNIT_DASH:    sprite = SPRITE_UNIT_DASH;  break;
-		case OBJ_TOWER_YELLOW: sprite = SPRITE_TOWER_YELLOW; break;
-		case OBJ_TOWER_BLUE:   sprite = SPRITE_TOWER_BLUE;   break;
-		case OBJ_SHOT_BLUE:    sprite = SPRITE_SHOT_BLUE;    break;
-		case OBJ_SHOT_RED:     sprite = SPRITE_SHOT_RED;     break;
-		case OBJ_BLOB_RED:     sprite = SPRITE_BLOB_RED;     break;
-		case OBJ_ENEMY_EGG:    sprite = SPRITE_ENEMY_EGG;    break;
-		case OBJ_ENEMY_BLOB:   sprite = SPRITE_ENEMY_BLOB;   break;
-		case OBJ_ENEMY_LEGS:   sprite = SPRITE_ENEMY_LEGS;   break;
+		case OBJ_NONE:             return;
+		case OBJ_ROCK:             sprite = SPRITE_ROCK_1 + obj->sprite_variant;          break;
+		case OBJ_TREE:             sprite = SPRITE_TREE;             tall_sprite = true; break;
+		case OBJ_CRYSTAL:          sprite = SPRITE_CRYSTAL;          tall_sprite = true; break;
+		case OBJ_UNIT_WALKER:      sprite = SPRITE_UNIT_WALKER;      break;
+		case OBJ_UNIT_BASIC:       sprite = SPRITE_UNIT_BASIC;       break;
+		case OBJ_UNIT_SHROOM:      sprite = SPRITE_UNIT_SHROOM;      break;
+		case OBJ_UNIT_DASH:        sprite = SPRITE_UNIT_DASH;        break;
+		case OBJ_TOWER_YELLOW:     sprite = SPRITE_TOWER_YELLOW;     break;
+		case OBJ_TOWER_BLUE:       sprite = SPRITE_TOWER_BLUE;       break;
+		case OBJ_MACHINE_MULTIACT: sprite = SPRITE_MACHINE_MULTIACT; break;
+		case OBJ_SHOT_BLUE:        sprite = SPRITE_SHOT_BLUE;        break;
+		case OBJ_SHOT_RED:         sprite = SPRITE_SHOT_RED;         break;
+		case OBJ_BLOB_RED:         sprite = SPRITE_BLOB_RED;         break;
+		case OBJ_ENEMY_EGG:        sprite = SPRITE_ENEMY_EGG;        break;
+		case OBJ_ENEMY_BLOB:       sprite = SPRITE_ENEMY_BLOB;       break;
+		case OBJ_ENEMY_LEGS:       sprite = SPRITE_ENEMY_LEGS;       break;
 		default: assert(false);
 	}
 	if (obj_type_is_tower(obj->type) && obj->ammo <= 0)
@@ -879,10 +881,13 @@ void map_generate(void)
 	tc = g_crystal_tc; *(rand() % 2 ? &tc.x : &tc.y) += rand() % 2 ? 2 : -2;
 	map_tile(tc)->obj = (obj_t){.type = unit_types[2]};
 
-	/* Also place a tower near the crystal. */
+	/* Also place a tower or a machine near the crystal. */
 	tc = g_crystal_tc; tc.x += rand() % 2 ? 1 : -1; tc.y += rand() % 2 ? 1 : -1;
 	map_tile(tc)->obj = (obj_t){
-		.type = rand() % 2 == 0 ? OBJ_TOWER_YELLOW : OBJ_TOWER_BLUE,
+		.type =
+			rand() % 3 == 0 ? OBJ_TOWER_YELLOW :
+			rand() % 2 == 0 ? OBJ_TOWER_BLUE :
+			OBJ_MACHINE_MULTIACT,
 		.ammo = 2 + rand() % 2};
 
 	/* Making sure that enemies close to the crystal are eggs so that the player
@@ -1179,6 +1184,8 @@ void update_selected_unit_options(tc_t unit_tc)
 	}
 }
 
+bool tile_is_adjacent_to(tc_t tc, obj_type_t to_what);
+
 void handle_mouse_click(bool is_left_click)
 {
 	if (g_shop_is_open)
@@ -1230,8 +1237,11 @@ void handle_mouse_click(bool is_left_click)
 				g_motion.src = map_tile_tc(old_selected);
 				g_motion.dst = map_tile_tc(new_selected);
 				g_motion.obj = (obj_t){.type = OBJ_TOWER_YELLOW, .ammo = 4};
-				g_tower_available = false;
-				old_selected->obj.can_still_act = false;
+				if (!tile_is_adjacent_to(map_tile_tc(old_selected), OBJ_MACHINE_MULTIACT))
+				{
+					old_selected->obj.can_still_act = false;
+					g_tower_available = false;
+				}
 				map_clear_options();
 			break;
 			case OPTION_TOWER_BLUE:
@@ -1241,7 +1251,11 @@ void handle_mouse_click(bool is_left_click)
 				g_motion.dst = map_tile_tc(new_selected);
 				g_motion.obj = (obj_t){.type = OBJ_TOWER_BLUE, .ammo = 5};
 				g_tower_available = false;
-				old_selected->obj.can_still_act = false;
+				if (!tile_is_adjacent_to(map_tile_tc(old_selected), OBJ_MACHINE_MULTIACT))
+				{
+					old_selected->obj.can_still_act = false;
+					g_tower_available = false;
+				}
 				map_clear_options();
 			break;
 			default:
@@ -1581,20 +1595,30 @@ bool game_play_enemy(void)
 					return false;
 				}
 
-				g_motion.t = 0;
-				g_motion.t_max = 6;
-				g_motion.src = src_tc;
-				g_motion.dst = dst_tc;
-				src_tile->obj.can_still_act = false;
-				g_enemy_that_played_count++;
+
 				if (lay_egg)
 				{
+					g_motion.t = 0;
+					g_motion.t_max = 6;
+					g_motion.src = src_tc;
+					g_motion.dst = dst_tc;
 					g_motion.obj = (obj_t){.type = OBJ_ENEMY_EGG};
+					if (!tile_is_adjacent_to(src_tc, OBJ_MACHINE_MULTIACT))
+					{
+						src_tile->obj.can_still_act = false;
+						g_enemy_that_played_count++;
+					}
 				}
 				else
 				{
+					g_motion.t = 0;
+					g_motion.t_max = 6;
+					g_motion.src = src_tc;
+					g_motion.dst = dst_tc;
 					g_motion.obj = src_tile->obj;
+					g_motion.obj.can_still_act = false;
 					src_tile->obj = (obj_t){0};
+					g_enemy_that_played_count++;
 				}
 				return false;
 			}
@@ -1641,12 +1665,41 @@ void tower_shoot(tc_t tower_tc, tc_t target_tc, obj_type_t shot_type)
 	g_motion.dst = target_tc;
 	g_motion.obj = (obj_t){.type = shot_type};
 
-	/* Update the tower. */
+	tile_t* tower_tile = map_tile(tower_tc);
+	assert(tower_tile->obj.ammo > 0);
+	tower_tile->obj.ammo--;
+}
+
+void tower_is_done(tc_t tower_tc)
+{
 	tile_t* tower_tile = map_tile(tower_tc);
 	tower_tile->obj.can_still_act = false;
 	g_tower_that_played_count++;
-	assert(tower_tile->obj.ammo > 0);
-	tower_tile->obj.ammo--;
+}
+
+bool tile_is_adjacent_to(tc_t tc, obj_type_t to_what)
+{
+	struct dir_t
+	{
+		int dx, dy;
+	};
+	typedef struct dir_t dir_t;
+	dir_t dirs[4] = {
+		{0, -1},
+		{1, 0},
+		{0, 1},
+		{-1, 0}};
+	for (int i = 0; i < 4; i++)
+	{
+		tc_t neighbor = tc;
+		neighbor.x += dirs[i].dx;
+		neighbor.y += dirs[i].dy;
+		if (map_tile(neighbor)->obj.type == to_what)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 int g_tower_orientation;
@@ -1662,6 +1715,10 @@ bool game_play_towers(void)
 		{
 			obj_type_t tower_type = tower_tile->obj.type;
 			assert(obj_type_is_tower(tower_type) && tower_tile->obj.ammo > 0);
+
+			/* If the tower is adjacent to a multiact machine (which we determine now)
+			 * then it will be able to shoot as many times as it wants. */
+			bool multiact = tile_is_adjacent_to(src_tc, OBJ_MACHINE_MULTIACT);
 
 			struct dir_t
 			{
@@ -1723,6 +1780,10 @@ bool game_play_towers(void)
 							tower_type == OBJ_TOWER_BLUE ? OBJ_SHOT_RED :
 							(assert(false), 0);
 						tower_shoot(src_tc, dirs[i].tc, shot_type);
+						if (!multiact || tower_tile->obj.ammo <= 0)
+						{
+							tower_is_done(src_tc);
+						}
 						return false;
 					}
 					if (type != OBJ_NONE)
@@ -1732,8 +1793,7 @@ bool game_play_towers(void)
 				}
 			}
 
-			tower_tile->obj.can_still_act = false;
-			g_tower_that_played_count++;
+			tower_is_done(src_tc);
 			return false;
 		}
 	}
@@ -1900,7 +1960,24 @@ void game_perform(void)
 			}
 			else
 			{
+				/* The motion was just an object moving. */
 				dst_tile->obj = g_motion.obj;
+
+				/* If it lands near a multiact machine, then it has to be marked
+				 * as still able to act again. */
+				if (obj_type_is_unit(dst_tile->obj.type) &&
+					g_phase == PHASE_PLAYER &&
+					tile_is_adjacent_to(g_motion.dst, OBJ_MACHINE_MULTIACT))
+				{
+					dst_tile->obj.can_still_act = true;
+				}
+				else if (obj_type_is_enemy(dst_tile->obj.type) &&
+					g_phase == PHASE_ENEMY &&
+					tile_is_adjacent_to(g_motion.dst, OBJ_MACHINE_MULTIACT))
+				{
+					dst_tile->obj.can_still_act = true;
+					g_enemy_that_played_count--;
+				}
 			}
 			g_motion = (motion_t){0};
 		}
@@ -2024,7 +2101,7 @@ void draw_shop_entry(shop_entry_def_t* def, shop_entry_t entry)
 
 	sc.x = rect.x + rect.w - 80;
 	char string[30];
-	sprintf(string, "%d", def->cost);
+	sprintf(string, "AT %d", def->cost);
 	color = g_shop_entry_hovered == (int)entry ?
 		def->cost > g_act_token_count ? (rgb_t){255, 0, 0} : (rgb_t){0, 255, 0} :
 		(rgb_t){255, 255, 255};
@@ -2165,6 +2242,8 @@ int main(int argc, char const* const* argv)
 	start_player_phase();
 
 	printf("Hold the LEFT CONTROL key to display the controls\n");
+
+	/* Gaming. */
 
 	g_time = 0;
 	bool running = true;
