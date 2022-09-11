@@ -12,6 +12,8 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 
+bool g_debug;
+
 int max(int a, int b)
 {
 	return a < b ? b : a;
@@ -339,6 +341,8 @@ enum obj_type_t
 	OBJ_ENEMY_EGG,
 	OBJ_ENEMY_BLOB,
 	OBJ_ENEMY_LEGS,
+
+	OBJ_NUMBER
 };
 typedef enum obj_type_t obj_type_t;
 
@@ -551,6 +555,7 @@ option_t tile_selected_option(tile_t const* tile)
 		}
 	}
 	assert(false);
+	exit(EXIT_FAILURE);
 }
 
 bool obj_type_is_tower(obj_type_t type);
@@ -990,6 +995,7 @@ tc_t map_tile_tc(tile_t* tile)
 		}
 	}
 	assert(false);
+	exit(EXIT_FAILURE);
 }
 
 sc_t g_mouse_sc;
@@ -1477,18 +1483,19 @@ bool obj_type_is_tower(obj_type_t type)
 	}
 }
 
-bool tile_is_walkable_by_fly(tile_t* tile)
+bool tile_is_walkable_by_enemy(tile_t* tile)
 {
 	return
 		tile->obj.type == OBJ_NONE ||
 		tile->obj.type == OBJ_CRYSTAL ||
 		obj_type_is_unit(tile->obj.type) ||
 		obj_type_is_tower(tile->obj.type) ||
+		tile->obj.type == OBJ_MACHINE_MULTIACT ||
 		tile->obj.type == OBJ_BLOB_RED ||
 		tile->obj.type == OBJ_TREE;
 }
 
-tc_t compute_fly_move(tc_t fly_tc, int recursion_budget, bool allow_random)
+tc_t compute_enemy_move(tc_t fly_tc, int recursion_budget, bool allow_random)
 {
 	if (tc_eq(fly_tc, g_crystal_tc))
 	{
@@ -1507,7 +1514,7 @@ tc_t compute_fly_move(tc_t fly_tc, int recursion_budget, bool allow_random)
 	for (int i = 0; i < 4; i++)
 	{
 		int index = reverse ? 3 - i : i;
-		if (tile_is_walkable_by_fly(map_tile(neighbor_tcs[index])))
+		if (tile_is_walkable_by_enemy(map_tile(neighbor_tcs[index])))
 		{
 			walkable_neighbor_tcs[walkable_neighbor_count++] = neighbor_tcs[index];
 		}
@@ -1528,7 +1535,7 @@ tc_t compute_fly_move(tc_t fly_tc, int recursion_budget, bool allow_random)
 			/* Try investigating where moving elsewhere can get us. */
 			for (int i = 0; i < walkable_neighbor_count; i++)
 			{
-				tc_t next_next_tc = compute_fly_move(compute_fly_move(walkable_neighbor_tcs[i],
+				tc_t next_next_tc = compute_enemy_move(compute_enemy_move(walkable_neighbor_tcs[i],
 					recursion_budget-1, false), recursion_budget-1, false);
 				int next_next_new_dist = tc_dist(next_next_tc, g_crystal_tc);
 				if (next_next_new_dist < tc_dist(fly_tc, g_crystal_tc))
@@ -1563,6 +1570,11 @@ bool game_play_enemy(void)
 			if (src_tile->obj.type == OBJ_ENEMY_EGG)
 			{
 				/* All an egg can do is hatch by chance. */
+				if (tile_is_adjacent_to(src_tc, OBJ_MACHINE_MULTIACT))
+				{
+					src_tile->obj.type = OBJ_ENEMY_BLOB;
+					return false;
+				}
 				src_tile->obj.can_still_act = false;
 				g_enemy_that_played_count++;
 				if (rand() % 4 == 0)
@@ -1578,11 +1590,11 @@ bool game_play_enemy(void)
 				 * which is to be decided. */
 				bool lay_egg = rand() % 11 == 0;
 				
-				tc_t dst_tc = compute_fly_move(src_tc, 2, true);
+				tc_t dst_tc = compute_enemy_move(src_tc, 2, true);
 				if (src_tile->obj.type == OBJ_ENEMY_LEGS &&
 					rand() % 17 != 0)
 				{
-					dst_tc = compute_fly_move(dst_tc, 2, true);
+					dst_tc = compute_enemy_move(dst_tc, 2, true);
 				}
 
 				if (!tc_in_map(dst_tc) || tc_eq(src_tc, dst_tc))
@@ -1593,7 +1605,7 @@ bool game_play_enemy(void)
 				}
 				tile_t* dst_tile = map_tile(dst_tc);
 
-				if (!tile_is_walkable_by_fly(dst_tile))
+				if (!tile_is_walkable_by_enemy(dst_tile))
 				{
 					src_tile->obj.can_still_act = false;
 					g_enemy_that_played_count++;
@@ -2176,6 +2188,8 @@ int main(int argc, char const* const* argv)
 {
 	printf("Why Crystals ? version 0.0.4 indev\n");
 
+	g_debug = false;
+
 	bool test_big = false;
 	for (int i = 1; i < argc; i++)
 	{
@@ -2287,6 +2301,33 @@ int main(int argc, char const* const* argv)
 								open_shop();
 							}
 						break;
+						case SDLK_d:
+							g_debug = true;
+						break;
+						case SDLK_a:
+						case SDLK_q:
+							if (g_debug)
+							{
+								tile_t* selected = map_selected_tile();
+								if (selected != NULL)
+								{
+									int incr = event.key.keysym.sym == SDLK_a ? 1 : -1;
+									selected->obj.type =
+										cool_mod(selected->obj.type + incr, OBJ_NUMBER);
+								}
+							}
+						break;
+						case SDLK_p:
+							if (g_debug)
+							{
+								for (tc_iter_all_t it = tc_iter_all_init();
+									tc_iter_all_cond(&it); tc_iter_all_next(&it))
+								{
+									tile_t* tile = map_tile(it.tc);
+									tile->obj = (obj_t){0};
+								}
+							}
+						break;
 					}
 				break;
 				case SDL_WINDOWEVENT:
@@ -2359,6 +2400,10 @@ int main(int argc, char const* const* argv)
 			snprintf(string, sizeof string, __VA_ARGS__); \
 			draw_text(string, (rgb_t){0, 0, 0}, (sc_t){0, y}); \
 			y += 20
+		if (g_debug)
+		{
+			DRAW_TEXT("DEBUG");
+		}
 		DRAW_TEXT("TURN %d", g_turn);
 		if (g_game_over)
 		{
