@@ -621,10 +621,11 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 			int option_index = 0;
 			int const selected_option_index =
 				cool_mod(g_selected_option_index, tile_count_options(tile));
-			rect.x += 2;
-			rect.y += 2;
-			rect.w = 16;
-			rect.h = 16;
+			SDL_Rect option_rect = rect;
+			option_rect.x += 2;
+			option_rect.y += 2;
+			option_rect.w = 16;
+			option_rect.h = 16;
 			for (int i = 0; i < OPTION_NUMBER; i++)
 			{
 				if (tile->options[i])
@@ -637,15 +638,20 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 						case OPTION_MACHINE_MULTIACT: sprite = SPRITE_MACHINE_MULTIACT; break;
 						default: assert(false);
 					}
-					draw_sprite(sprite, &rect);
+					draw_sprite(sprite, &option_rect);
 
 					if (tile->is_hovered && option_index == selected_option_index)
 					{
 						SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
-						SDL_RenderDrawRect(g_renderer, &rect);
+						SDL_RenderDrawRect(g_renderer, &option_rect);
 					}
 
-					rect.y += 16 + 2;
+					option_rect.y += 16 + 2;
+					if (option_rect.y + option_rect.h + 2 > rect.y + rect.h)
+					{
+						option_rect.y = rect.y + 2;
+						option_rect.x += 16 + 2;
+					}
 					option_index++;
 				}
 			}
