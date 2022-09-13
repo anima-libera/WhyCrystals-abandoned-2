@@ -562,13 +562,20 @@ option_t tile_selected_option(tile_t const* tile)
 
 bool obj_type_is_tower(obj_type_t type);
 
+/* The original color was (109, 216, 37).
+ * There is also (30, 137, 77) that feels good (and it could be nice to have the color be
+ * chosen at random) but some colors of map ui elements are really hard to look at in front
+ * of this color. */
+rgb_t g_grassland_color = {109, 216, 37};
+
 void draw_tile(tile_t const* tile, sc_t sc, int side)
 {
 	assert(tile->floor == FLOOR_GRASSLAND);
 
 	/* Draw grassland color and sprite decoration. */
 	SDL_Rect rect = {.x = sc.x, .y = sc.y, .w = side, .h = side};
-	SDL_SetRenderDrawColor(g_renderer, 109, 216, 37, 255);
+	SDL_SetRenderDrawColor(g_renderer,
+		g_grassland_color.r, g_grassland_color.g, g_grassland_color.b, 255);
 	SDL_RenderFillRect(g_renderer, &rect);
 	sprite_t sprite = SPRITE_GRASSLAND_0 + tile->sprite_variant;
 	draw_sprite(sprite, &rect);
@@ -2275,6 +2282,13 @@ int main(int argc, char const* const* argv)
 	assert(g_font != NULL);
 
 	init_sprite_sheet();
+
+	if (rand() % 60 == 0)
+	{
+		g_grassland_color.r = 30;
+		g_grassland_color.g = 137;
+		g_grassland_color.b = 77;
+	}
 	
 	g_motion = (motion_t){0};
 	map_generate();
