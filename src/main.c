@@ -2101,8 +2101,7 @@ void draw_crystal_spiral(void)
 
 enum shop_entry_t
 {
-	SHOP_ENTRY_TEST_1,
-	SHOP_ENTRY_TEST_2,
+	SHOP_ENTRY_TEST,
 	SHOP_ENTRY_MULTIACT,
 
 	SHOP_ENTRY_NUMBER
@@ -2164,8 +2163,7 @@ void draw_shop_entry(shop_entry_def_t* def, shop_entry_t entry)
 }
 
 shop_entry_def_t g_shop_table[] = {
-	[SHOP_ENTRY_TEST_1] = {.cost = 3, .name = "TEST 1"},
-	[SHOP_ENTRY_TEST_2] = {.cost = 5, .name = "TEST 2"},
+	[SHOP_ENTRY_TEST] = {.cost = 3, .name = "PRINT \"TEST\" (NOT WORTH IT)"},
 	[SHOP_ENTRY_MULTIACT] = {.cost = 20, .name = "MULTIACT MACHINE"}};
 
 void draw_shop(void)
@@ -2186,18 +2184,15 @@ void shop_click(void)
 		return;
 	}
 
-	if (g_shop_table[g_shop_entry_hovered].cost >= g_act_token_count)
+	if (g_shop_table[g_shop_entry_hovered].cost > g_act_token_count)
 	{
 		return;
 	}
 
 	switch (g_shop_entry_hovered)
 	{
-		case SHOP_ENTRY_TEST_1:
-			printf("test 1\n");
-		break;
-		case SHOP_ENTRY_TEST_2:
-			printf("test 2\n");
+		case SHOP_ENTRY_TEST:
+			printf("TEST\n");
 		break;
 		case SHOP_ENTRY_MULTIACT:
 			g_inventory[INVENTORY_ENTRY_MULTIACT]++;
@@ -2518,6 +2513,10 @@ int main(int argc, char const* const* argv)
 	if (!g_game_over)
 	{
 		printf("Quit on turn %d\n", g_turn);
+	}
+	if (g_debug)
+	{
+		printf("Debug was enabled\n");
 	}
 
 	TTF_Quit();
