@@ -2283,7 +2283,7 @@ int main(int argc, char const* const* argv)
 
 	init_sprite_sheet();
 
-	if (rand() % 60 == 0)
+	if (rand() % 10 == 0)
 	{
 		g_grassland_color.r = 30;
 		g_grassland_color.g = 137;
