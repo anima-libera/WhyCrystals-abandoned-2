@@ -1141,6 +1141,8 @@ typedef enum inventory_entry_t inventory_entry_t;
 
 int g_inventory[INVENTORY_ENTRY_NUMBER] = {0};
 
+int tc_dist(tc_t a, tc_t b);
+
 void update_selected_unit_options(tc_t unit_tc)
 {
 	map_clear_options();
@@ -1209,18 +1211,26 @@ void update_selected_unit_options(tc_t unit_tc)
 		{
 			continue;
 		}
+		bool tower_and_machines =
+			(
+				unit_tile->obj.type != OBJ_UNIT_SHROOM &&
+				path_exists(unit_tc, it.tc, tower_dist)) ||
+			(
+				unit_tile->obj.type == OBJ_UNIT_SHROOM &&
+				tc_dist(unit_tc, it.tc) == 3 &&
+				map_tile(it.tc)->obj.type == OBJ_NONE);
 		tile_t* tile = map_tile(it.tc);
 		tile->options[OPTION_WALK] |=
 			path_exists(unit_tc, it.tc, walk_dist);
 		tile->options[OPTION_TOWER_YELLOW] |=
 			g_tower_available &&
-			path_exists(unit_tc, it.tc, tower_dist);
+			tower_and_machines;
 		tile->options[OPTION_TOWER_BLUE] |=
 			g_tower_available &&
-			path_exists(unit_tc, it.tc, tower_dist);
+			tower_and_machines;
 		tile->options[OPTION_MACHINE_MULTIACT] |=
 			g_inventory[INVENTORY_ENTRY_MULTIACT] >= 1 &&
-			path_exists(unit_tc, it.tc, tower_dist);
+			tower_and_machines;
 	}
 }
 
