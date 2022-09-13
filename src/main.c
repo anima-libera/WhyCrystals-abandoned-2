@@ -425,6 +425,7 @@ enum option_t
 	OPTION_WALK,
 	OPTION_TOWER_YELLOW,
 	OPTION_TOWER_BLUE,
+	OPTION_MACHINE_MULTIACT,
 
 	OPTION_NUMBER
 };
@@ -436,6 +437,7 @@ bool option_is_tower(option_t option)
 	{
 		case OPTION_TOWER_YELLOW:
 		case OPTION_TOWER_BLUE:
+		case OPTION_MACHINE_MULTIACT:
 			return true;
 		default:
 			return false;
@@ -629,9 +631,10 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 				{
 					switch (i)
 					{
-						case OPTION_WALK:         sprite = SPRITE_WALK;         break;
-						case OPTION_TOWER_YELLOW: sprite = SPRITE_TOWER_YELLOW; break;
-						case OPTION_TOWER_BLUE:   sprite = SPRITE_TOWER_BLUE;   break;
+						case OPTION_WALK:             sprite = SPRITE_WALK;             break;
+						case OPTION_TOWER_YELLOW:     sprite = SPRITE_TOWER_YELLOW;     break;
+						case OPTION_TOWER_BLUE:       sprite = SPRITE_TOWER_BLUE;       break;
+						case OPTION_MACHINE_MULTIACT: sprite = SPRITE_MACHINE_MULTIACT; break;
 						default: assert(false);
 					}
 					draw_sprite(sprite, &rect);
@@ -1115,6 +1118,16 @@ bool obj_type_is_unit(obj_type_t type)
 
 void shop_click(void);
 
+enum inventory_entry_t
+{
+	INVENTORY_ENTRY_MULTIACT,
+
+	INVENTORY_ENTRY_NUMBER
+};
+typedef enum inventory_entry_t inventory_entry_t;
+
+int g_inventory[INVENTORY_ENTRY_NUMBER] = {0};
+
 void update_selected_unit_options(tc_t unit_tc)
 {
 	map_clear_options();
@@ -1192,10 +1205,14 @@ void update_selected_unit_options(tc_t unit_tc)
 		tile->options[OPTION_TOWER_BLUE] |=
 			g_tower_available &&
 			path_exists(unit_tc, it.tc, tower_dist);
+		tile->options[OPTION_MACHINE_MULTIACT] |=
+			g_inventory[INVENTORY_ENTRY_MULTIACT] >= 1 &&
+			path_exists(unit_tc, it.tc, tower_dist);
 	}
 }
 
 bool tile_is_adjacent_to(tc_t tc, obj_type_t to_what);
+int tc_dist(tc_t a, tc_t b);
 
 void handle_mouse_click(bool is_left_click)
 {
@@ -1248,10 +1265,10 @@ void handle_mouse_click(bool is_left_click)
 				g_motion.src = map_tile_tc(old_selected);
 				g_motion.dst = map_tile_tc(new_selected);
 				g_motion.obj = (obj_t){.type = OBJ_TOWER_YELLOW, .ammo = 4};
+				g_tower_available = false;
 				if (!tile_is_adjacent_to(map_tile_tc(old_selected), OBJ_MACHINE_MULTIACT))
 				{
 					old_selected->obj.can_still_act = false;
-					g_tower_available = false;
 				}
 				map_clear_options();
 			break;
@@ -1265,7 +1282,21 @@ void handle_mouse_click(bool is_left_click)
 				if (!tile_is_adjacent_to(map_tile_tc(old_selected), OBJ_MACHINE_MULTIACT))
 				{
 					old_selected->obj.can_still_act = false;
-					g_tower_available = false;
+				}
+				map_clear_options();
+			break;
+			case OPTION_MACHINE_MULTIACT:
+				g_motion.t = 0;
+				g_motion.t_max = 7;
+				g_motion.src = map_tile_tc(old_selected);
+				g_motion.dst = map_tile_tc(new_selected);
+				g_motion.obj = (obj_t){.type = OBJ_MACHINE_MULTIACT};
+				assert(g_inventory[INVENTORY_ENTRY_MULTIACT] >= 1);
+				g_inventory[INVENTORY_ENTRY_MULTIACT]--;
+				if (!(tile_is_adjacent_to(map_tile_tc(old_selected), OBJ_MACHINE_MULTIACT) ||
+					tc_dist(g_motion.src, g_motion.dst) == 1))
+				{
+					old_selected->obj.can_still_act = false;
 				}
 				map_clear_options();
 			break;
@@ -2066,6 +2097,7 @@ enum shop_entry_t
 {
 	SHOP_ENTRY_TEST_1,
 	SHOP_ENTRY_TEST_2,
+	SHOP_ENTRY_MULTIACT,
 
 	SHOP_ENTRY_NUMBER
 };
@@ -2127,7 +2159,8 @@ void draw_shop_entry(shop_entry_def_t* def, shop_entry_t entry)
 
 shop_entry_def_t g_shop_table[] = {
 	[SHOP_ENTRY_TEST_1] = {.cost = 3, .name = "TEST 1"},
-	[SHOP_ENTRY_TEST_2] = {.cost = 5, .name = "TEST 2"}};
+	[SHOP_ENTRY_TEST_2] = {.cost = 5, .name = "TEST 2"},
+	[SHOP_ENTRY_MULTIACT] = {.cost = 20, .name = "MULTIACT MACHINE"}};
 
 void draw_shop(void)
 {
@@ -2147,6 +2180,11 @@ void shop_click(void)
 		return;
 	}
 
+	if (g_shop_table[g_shop_entry_hovered].cost >= g_act_token_count)
+	{
+		return;
+	}
+
 	switch (g_shop_entry_hovered)
 	{
 		case SHOP_ENTRY_TEST_1:
@@ -2154,6 +2192,9 @@ void shop_click(void)
 		break;
 		case SHOP_ENTRY_TEST_2:
 			printf("test 2\n");
+		break;
+		case SHOP_ENTRY_MULTIACT:
+			g_inventory[INVENTORY_ENTRY_MULTIACT]++;
 		break;
 		default:
 			assert(false);
@@ -2326,6 +2367,12 @@ int main(int argc, char const* const* argv)
 									tile_t* tile = map_tile(it.tc);
 									tile->obj = (obj_t){0};
 								}
+							}
+						break;
+						case SDLK_t:
+							if (g_debug)
+							{
+								g_act_token_count += 1000;
 							}
 						break;
 					}
