@@ -1237,6 +1237,68 @@ void update_selected_unit_options(tc_t unit_tc)
 bool tile_is_adjacent_to(tc_t tc, obj_type_t to_what);
 int tc_dist(tc_t a, tc_t b);
 
+void perform_option(tc_t unit_tc, tc_t dst_tc, option_t option)
+{
+	tile_t* unit_tile = map_tile(unit_tc);
+	switch (option)
+	{
+		case OPTION_WALK:
+			g_motion.t = 0;
+			g_motion.t_max = 7;
+			g_motion.src = unit_tc;
+			g_motion.dst = dst_tc;
+			g_motion.obj = unit_tile->obj;
+			g_motion.obj.can_still_act = false;
+			unit_tile->obj = (obj_t){0};
+			map_clear_options();
+		break;
+		case OPTION_TOWER_YELLOW:
+			g_motion.t = 0;
+			g_motion.t_max = 7;
+			g_motion.src = unit_tc;
+			g_motion.dst = dst_tc;
+			g_motion.obj = (obj_t){.type = OBJ_TOWER_YELLOW, .ammo = 4};
+			g_tower_available = false;
+			if (!tile_is_adjacent_to(unit_tc, OBJ_MACHINE_MULTIACT))
+			{
+				unit_tile->obj.can_still_act = false;
+			}
+			map_clear_options();
+		break;
+		case OPTION_TOWER_BLUE:
+			g_motion.t = 0;
+			g_motion.t_max = 7;
+			g_motion.src = unit_tc;
+			g_motion.dst = dst_tc;
+			g_motion.obj = (obj_t){.type = OBJ_TOWER_BLUE, .ammo = 5};
+			g_tower_available = false;
+			if (!tile_is_adjacent_to(unit_tc, OBJ_MACHINE_MULTIACT))
+			{
+				unit_tile->obj.can_still_act = false;
+			}
+			map_clear_options();
+		break;
+		case OPTION_MACHINE_MULTIACT:
+			g_motion.t = 0;
+			g_motion.t_max = 7;
+			g_motion.src = unit_tc;
+			g_motion.dst = dst_tc;
+			g_motion.obj = (obj_t){.type = OBJ_MACHINE_MULTIACT};
+			assert(g_inventory[INVENTORY_ENTRY_MULTIACT] >= 1);
+			g_inventory[INVENTORY_ENTRY_MULTIACT]--;
+			if (!(tile_is_adjacent_to(unit_tc, OBJ_MACHINE_MULTIACT) ||
+				tc_dist(g_motion.src, g_motion.dst) == 1))
+			{
+				unit_tile->obj.can_still_act = false;
+			}
+			map_clear_options();
+		break;
+		default:
+			assert(false);
+		break;
+	}
+}
+
 void handle_mouse_click(bool is_left_click)
 {
 	if (g_shop_is_open)
@@ -1270,63 +1332,8 @@ void handle_mouse_click(bool is_left_click)
 
 	if (is_left_click && tile_has_options(new_selected))
 	{
-		switch (tile_selected_option(new_selected))
-		{
-			case OPTION_WALK:
-				g_motion.t = 0;
-				g_motion.t_max = 7;
-				g_motion.src = map_tile_tc(old_selected);
-				g_motion.dst = map_tile_tc(new_selected);
-				g_motion.obj = old_selected->obj;
-				g_motion.obj.can_still_act = false;
-				old_selected->obj = (obj_t){0};
-				map_clear_options();
-			break;
-			case OPTION_TOWER_YELLOW:
-				g_motion.t = 0;
-				g_motion.t_max = 7;
-				g_motion.src = map_tile_tc(old_selected);
-				g_motion.dst = map_tile_tc(new_selected);
-				g_motion.obj = (obj_t){.type = OBJ_TOWER_YELLOW, .ammo = 4};
-				g_tower_available = false;
-				if (!tile_is_adjacent_to(map_tile_tc(old_selected), OBJ_MACHINE_MULTIACT))
-				{
-					old_selected->obj.can_still_act = false;
-				}
-				map_clear_options();
-			break;
-			case OPTION_TOWER_BLUE:
-				g_motion.t = 0;
-				g_motion.t_max = 7;
-				g_motion.src = map_tile_tc(old_selected);
-				g_motion.dst = map_tile_tc(new_selected);
-				g_motion.obj = (obj_t){.type = OBJ_TOWER_BLUE, .ammo = 5};
-				g_tower_available = false;
-				if (!tile_is_adjacent_to(map_tile_tc(old_selected), OBJ_MACHINE_MULTIACT))
-				{
-					old_selected->obj.can_still_act = false;
-				}
-				map_clear_options();
-			break;
-			case OPTION_MACHINE_MULTIACT:
-				g_motion.t = 0;
-				g_motion.t_max = 7;
-				g_motion.src = map_tile_tc(old_selected);
-				g_motion.dst = map_tile_tc(new_selected);
-				g_motion.obj = (obj_t){.type = OBJ_MACHINE_MULTIACT};
-				assert(g_inventory[INVENTORY_ENTRY_MULTIACT] >= 1);
-				g_inventory[INVENTORY_ENTRY_MULTIACT]--;
-				if (!(tile_is_adjacent_to(map_tile_tc(old_selected), OBJ_MACHINE_MULTIACT) ||
-					tc_dist(g_motion.src, g_motion.dst) == 1))
-				{
-					old_selected->obj.can_still_act = false;
-				}
-				map_clear_options();
-			break;
-			default:
-				assert(false);
-			break;
-		}
+		option_t option = tile_selected_option(new_selected);
+		perform_option(map_tile_tc(old_selected), map_tile_tc(new_selected), option);
 	}
 
 	if (is_left_click)
@@ -1343,24 +1350,19 @@ void handle_mouse_click(bool is_left_click)
 
 int g_shop_scroll;
 
-void handle_mouse_wheel(int wheel_motion)
+void scroll_shop(int scroll)
 {
-	if (g_shop_is_open)
-	{
-		g_shop_scroll += wheel_motion * 30;
-		return;
-	}
+	g_shop_scroll += scroll * 30;
+}
 
-	/* The wheel is usually to zoom, but may be used to select an option
-	 * on available tiles. */
-	if (tile_has_options(map_hovered_tile()))
-	{
-		g_selected_option_index += -wheel_motion;
-		return;
-	}
+/* Change the selected option on available tiles that present options. */
+void scroll_option(int scroll)
+{
+	g_selected_option_index += -scroll;
+}
 
-	/* It seems that we have to zoom on the map then. */
-
+void scroll_map_zoom(int scroll)
+{
 	/* Save the precise position in the map (tc coordinate space)
 	 * where the mouse is pointing (before zooming) so that we can
 	 * move the map after zooming to put that position under the
@@ -1377,7 +1379,7 @@ void handle_mouse_wheel(int wheel_motion)
 	if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LCTRL])
 	{
 		/* Holding the left control key makes the zoom be pixel-per-pixel. */
-		g_tile_side_pixels += wheel_motion;
+		g_tile_side_pixels += scroll;
 		if (g_tile_side_pixels <= 0)
 		{
 			g_tile_side_pixels = 1;
@@ -1390,19 +1392,19 @@ void handle_mouse_wheel(int wheel_motion)
 		 * screen. This is a sane default for now. */
 		if (g_tile_side_pixels % 16 != 0)
 		{
-			if (wheel_motion < 0)
+			if (scroll < 0)
 			{
 				g_tile_side_pixels -= g_tile_side_pixels % 16;
-				wheel_motion++;
+				scroll++;
 			}
-			else if (wheel_motion > 0)
+			else if (scroll > 0)
 			{
 				g_tile_side_pixels -= g_tile_side_pixels % 16;
 				g_tile_side_pixels += 16;
-				wheel_motion--;
+				scroll--;
 			}
 		}
-		g_tile_side_pixels += wheel_motion * 16;
+		g_tile_side_pixels += scroll * 16;
 		int const max_side = min(g_window_w, g_window_h) / 2;
 		if (g_tile_side_pixels < 16)
 		{
@@ -1428,6 +1430,22 @@ void handle_mouse_wheel(int wheel_motion)
 		(new_float_tc_y - old_float_tc_y) * (float)g_tile_side_pixels;
 	g_tc_sc_offset.y += floorf(g_tc_sc_offset_frac_y);
 	g_tc_sc_offset_frac_y -= floorf(g_tc_sc_offset_frac_y);
+}
+
+void handle_mouse_wheel(int scroll)
+{
+	if (g_shop_is_open)
+	{
+		scroll_shop(scroll);
+	}
+	else if (tile_has_options(map_hovered_tile()))
+	{
+		scroll_option(scroll);
+	}
+	else
+	{
+		scroll_map_zoom(scroll);
+	}
 }
 
 void handle_window_resize(int new_w, int new_h)
