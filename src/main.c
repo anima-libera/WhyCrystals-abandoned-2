@@ -1293,8 +1293,7 @@ void perform_option(tc_t unit_tc, tc_t dst_tc, option_t option)
 			g_motion.obj = (obj_t){.type = OBJ_MACHINE_MULTIACT};
 			assert(g_inventory[INVENTORY_ENTRY_MULTIACT] >= 1);
 			g_inventory[INVENTORY_ENTRY_MULTIACT]--;
-			if (!(tile_is_adjacent_to(unit_tc, OBJ_MACHINE_MULTIACT) ||
-				tc_dist(g_motion.src, g_motion.dst) == 1))
+			if (!tile_is_adjacent_to(unit_tc, OBJ_MACHINE_MULTIACT))
 			{
 				unit_tile->obj.can_still_act = false;
 			}
@@ -1719,7 +1718,7 @@ bool game_play_enemy(void)
 					dst_tile = map_tile(dst_tc);
 				}
 
-				bool lay_speeder = src_tile->obj.type == OBJ_ENEMY_LEGS && rand() % 3 == 0;
+				bool lay_speeder = src_tile->obj.type == OBJ_ENEMY_LEGS && rand() % 2 == 0;
 
 				if (lay_egg)
 				{
@@ -2051,15 +2050,8 @@ void game_perform(void)
 			if (g_motion.obj.type == OBJ_SHOT_BLUE || g_motion.obj.type == OBJ_SHOT_RED)
 			{
 				/* Doing damage to the impacted tile, often killing its content. */
-				if (dst_tile->obj.type == OBJ_ENEMY_LEGS)
-				{
-					dst_tile->obj.life--;
-					if (dst_tile->obj.life <= 0)
-					{
-						dst_tile->obj = (obj_t){0};
-					}
-				}
-				else
+				dst_tile->obj.life--;
+				if (dst_tile->obj.life <= 0)
 				{
 					dst_tile->obj = (obj_t){0};
 				}
@@ -2093,8 +2085,8 @@ void game_perform(void)
 				/* The motion was just an object moving. */
 				dst_tile->obj = g_motion.obj;
 
-				/* If it lands near a multiact machine, then it has to be marked
-				 * as still able to act again. */
+				/* If the moving object lands near a multiact machine,
+				 * then it may have to be marked as able to act again. */
 				if (obj_type_is_unit(dst_tile->obj.type) &&
 					g_phase == PHASE_PLAYER &&
 					tile_is_adjacent_to(g_motion.dst, OBJ_MACHINE_MULTIACT))
@@ -2107,6 +2099,40 @@ void game_perform(void)
 				{
 					dst_tile->obj.can_still_act = true;
 					g_enemy_that_played_count--;
+				}
+
+				/* If the moving object is a multiact machine, then it may land
+				 * near to an object that has to be marked as able to act again. */
+				if (dst_tile->obj.type == OBJ_MACHINE_MULTIACT)
+				{
+					struct dir_t
+					{
+						int dx, dy;
+					};
+					typedef struct dir_t dir_t;
+					dir_t dirs[] = {
+						{0, -1},
+						{1, 0},
+						{0, 1},
+						{-1, 0}};
+					for (int i = 0; i < 4; i++)
+					{
+						tc_t neighbor = g_motion.dst;
+						neighbor.x += dirs[i].dx;
+						neighbor.y += dirs[i].dy;
+						tile_t* tile = map_tile(neighbor);
+						if (obj_type_is_unit(tile->obj.type) &&
+							g_phase == PHASE_PLAYER)
+						{
+							tile->obj.can_still_act = true;
+						}
+						else if (obj_type_is_enemy(tile->obj.type) &&
+							g_phase == PHASE_ENEMY)
+						{
+							tile->obj.can_still_act = true;
+							g_enemy_that_played_count--;
+						}
+					}
 				}
 			}
 			g_motion = (motion_t){0};
@@ -2308,12 +2334,12 @@ int main(int argc, char const* const* argv)
 
 	g_debug = false;
 
-	bool test_big = false;
+	bool test = false;
 	for (int i = 1; i < argc; i++)
 	{
-		if (strcmp(argv[i], "--test-big") == 0)
+		if (strcmp(argv[i], "--test") == 0)
 		{
-			test_big = true;
+			test = true;
 		}
 	}
 
@@ -2363,18 +2389,9 @@ int main(int argc, char const* const* argv)
 	map_generate();
 	center_view(g_crystal_tc);
 
-	if (test_big)
+	if (test)
 	{
-		for (tc_iter_all_t it = tc_iter_all_init();
-			tc_iter_all_cond(&it); tc_iter_all_next(&it))
-		{
-			tile_t* tile = map_tile(it.tc);
-			if (tile->obj.type == OBJ_ENEMY_BLOB)
-			{
-				tile->obj.type = OBJ_ENEMY_LEGS;
-				tile->obj.life = 3;
-			}
-		}
+		printf("test\n");
 	}
 
 	g_shop_is_open = false;
