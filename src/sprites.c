@@ -40,12 +40,16 @@ static sprite_ref_t s_sprite_rect_table[] = {
 	[SPRITE_SHOT_RED] =         {1, R16( 3, 6, 1, 1)},
 	[SPRITE_BLOB_RED] =         {1, R16( 4, 6, 1, 1)},
 	[SPRITE_ENEMY_EGG] =        {1, R16( 7, 2, 1, 1)},
+	[SPRITE_ENEMY_SPEEDER] =    {1, R16( 8, 6, 1, 1)},
 	[SPRITE_ENEMY_BLOB] =       {1, R16( 4, 2, 1, 1)},
 	[SPRITE_ENEMY_LEGS] =       {1, R16( 5, 2, 1, 1)},
+	[SPRITE_ENEMY_FAST] =       {1, R16( 6, 2, 1, 1)},
+	[SPRITE_ENEMY_BIG] =        {1, R16(12, 2, 1, 1)},
 	[SPRITE_ARROW_UP] =         {1, R16( 2, 7, 1, 1)},
 	[SPRITE_ARROW_RIGHT] =      {1, R16( 3, 7, 1, 1)},
 	[SPRITE_ARROW_DOWN] =       {1, R16( 4, 7, 1, 1)},
 	[SPRITE_ARROW_LEFT] =       {1, R16( 5, 7, 1, 1)},
+	[SPRITE_UNKNOWN] =          {1, R16( 0, 2, 1, 1)},
 	#undef R16
 };
 

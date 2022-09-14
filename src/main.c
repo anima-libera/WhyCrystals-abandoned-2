@@ -339,8 +339,11 @@ enum obj_type_t
 	OBJ_SHOT_RED,
 	OBJ_BLOB_RED,
 	OBJ_ENEMY_EGG,
+	OBJ_ENEMY_SPEEDER,
 	OBJ_ENEMY_BLOB,
 	OBJ_ENEMY_LEGS,
+	OBJ_ENEMY_FAST,
+	OBJ_ENEMY_BIG,
 
 	OBJ_NUMBER
 };
@@ -367,7 +370,7 @@ void draw_obj(obj_t const* obj, sc_t sc, int side)
 	switch (obj->type)
 	{
 		case OBJ_NONE:             return;
-		case OBJ_ROCK:             sprite = SPRITE_ROCK_1 + obj->sprite_variant;          break;
+		case OBJ_ROCK:             sprite = SPRITE_ROCK_1 + obj->sprite_variant;         break;
 		case OBJ_TREE:             sprite = SPRITE_TREE;             tall_sprite = true; break;
 		case OBJ_CRYSTAL:          sprite = SPRITE_CRYSTAL;          tall_sprite = true; break;
 		case OBJ_UNIT_WALKER:      sprite = SPRITE_UNIT_WALKER;      break;
@@ -381,9 +384,12 @@ void draw_obj(obj_t const* obj, sc_t sc, int side)
 		case OBJ_SHOT_RED:         sprite = SPRITE_SHOT_RED;         break;
 		case OBJ_BLOB_RED:         sprite = SPRITE_BLOB_RED;         break;
 		case OBJ_ENEMY_EGG:        sprite = SPRITE_ENEMY_EGG;        break;
+		case OBJ_ENEMY_SPEEDER:    sprite = SPRITE_ENEMY_SPEEDER;    break;
 		case OBJ_ENEMY_BLOB:       sprite = SPRITE_ENEMY_BLOB;       break;
 		case OBJ_ENEMY_LEGS:       sprite = SPRITE_ENEMY_LEGS;       break;
-		default: assert(false);
+		case OBJ_ENEMY_FAST:       sprite = SPRITE_ENEMY_FAST;       break;
+		case OBJ_ENEMY_BIG:        sprite = SPRITE_ENEMY_BIG;        break;
+		default:                   sprite = SPRITE_UNKNOWN;          break;
 	}
 	if (obj_type_is_tower(obj->type) && obj->ammo <= 0)
 	{
@@ -561,6 +567,7 @@ option_t tile_selected_option(tile_t const* tile)
 }
 
 bool obj_type_is_tower(obj_type_t type);
+bool obj_type_is_enemy(obj_type_t type);
 
 /* The original color was (109, 216, 37).
  * There is also (30, 137, 77) that feels good (and it could be nice to have the color be
@@ -685,7 +692,7 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 	}
 
 	/* Draw the life count. */
-	if (tile->obj.type == OBJ_ENEMY_LEGS &&
+	if (obj_type_is_enemy(tile->obj.type) && tile->obj.life >= 2 &&
 		(tile->is_selected || tile->is_hovered || SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT]))
 	{
 		SDL_Rect text_rect = rect;
@@ -1489,9 +1496,12 @@ bool obj_type_is_enemy(obj_type_t type)
 {
 	switch (type)
 	{
+		case OBJ_ENEMY_EGG:
+		case OBJ_ENEMY_SPEEDER:
 		case OBJ_ENEMY_BLOB:
 		case OBJ_ENEMY_LEGS:
-		case OBJ_ENEMY_EGG:
+		case OBJ_ENEMY_FAST:
+		case OBJ_ENEMY_BIG:
 			return true;
 		default:
 			return false;
@@ -1499,7 +1509,7 @@ bool obj_type_is_enemy(obj_type_t type)
 }
 
 int g_enemy_already_spawn_count;
-int g_enemy_big_already_spawn_count;
+int g_enemy_hard_already_spawn_count;
 
 void spawn_one_enemy(obj_type_t type)
 {
@@ -1530,16 +1540,16 @@ void spawn_one_enemy(obj_type_t type)
 	g_motion.src = spawn_location_src;
 	g_motion.dst = spawn_location_dst;
 	g_motion.obj = (obj_t){.type = type};
-	if (g_motion.obj.type == OBJ_ENEMY_LEGS)
+	if (g_motion.obj.type == OBJ_ENEMY_BIG)
 	{
-		g_motion.obj.life = 3;
+		g_motion.obj.life = 5;
 	}
 	g_motion.obj.can_still_act = false;
 
 	g_enemy_already_spawn_count++;
-	if (g_motion.obj.type == OBJ_ENEMY_LEGS)
+	if (g_motion.obj.type != OBJ_ENEMY_BLOB)
 	{
-		g_enemy_big_already_spawn_count++;
+		g_enemy_hard_already_spawn_count++;
 	}
 }
 
@@ -1564,22 +1574,23 @@ bool tile_is_walkable_by_enemy(tile_t* tile)
 		obj_type_is_tower(tile->obj.type) ||
 		tile->obj.type == OBJ_MACHINE_MULTIACT ||
 		tile->obj.type == OBJ_BLOB_RED ||
-		tile->obj.type == OBJ_TREE;
+		tile->obj.type == OBJ_TREE ||
+		tile->obj.type == OBJ_ENEMY_SPEEDER;
 }
 
-tc_t compute_enemy_move(tc_t fly_tc, int recursion_budget, bool allow_random)
+tc_t compute_enemy_move(tc_t enemy_tc, int recursion_budget, bool allow_random)
 {
-	if (tc_eq(fly_tc, g_crystal_tc))
+	if (tc_eq(enemy_tc, g_crystal_tc))
 	{
-		return fly_tc;
+		return enemy_tc;
 	}
 
 	/* List walkable neighbors. */
 	tc_t neighbor_tcs[4] = {
-		{fly_tc.x-1, fly_tc.y},
-		{fly_tc.x, fly_tc.y-1},
-		{fly_tc.x+1, fly_tc.y},
-		{fly_tc.x, fly_tc.y+1}};
+		{enemy_tc.x-1, enemy_tc.y},
+		{enemy_tc.x, enemy_tc.y-1},
+		{enemy_tc.x+1, enemy_tc.y},
+		{enemy_tc.x, enemy_tc.y+1}};
 	tc_t walkable_neighbor_tcs[4];
 	int walkable_neighbor_count = 0;
 	bool reverse = rand() % 2 == 0; /* Reverse the order of the tiles ? */
@@ -1597,7 +1608,7 @@ tc_t compute_enemy_move(tc_t fly_tc, int recursion_budget, bool allow_random)
 		for (int i = 0; i < walkable_neighbor_count; i++)
 		{
 			int new_dist = tc_dist(walkable_neighbor_tcs[i], g_crystal_tc);
-			if (new_dist < tc_dist(fly_tc, g_crystal_tc))
+			if (new_dist < tc_dist(enemy_tc, g_crystal_tc))
 			{
 				return walkable_neighbor_tcs[i];
 			}
@@ -1610,7 +1621,7 @@ tc_t compute_enemy_move(tc_t fly_tc, int recursion_budget, bool allow_random)
 				tc_t next_next_tc = compute_enemy_move(compute_enemy_move(walkable_neighbor_tcs[i],
 					recursion_budget-1, false), recursion_budget-1, false);
 				int next_next_new_dist = tc_dist(next_next_tc, g_crystal_tc);
-				if (next_next_new_dist < tc_dist(fly_tc, g_crystal_tc))
+				if (next_next_new_dist < tc_dist(enemy_tc, g_crystal_tc))
 				{
 					return walkable_neighbor_tcs[i];
 				}
@@ -1623,7 +1634,7 @@ tc_t compute_enemy_move(tc_t fly_tc, int recursion_budget, bool allow_random)
 	}
 	else
 	{
-		return fly_tc;
+		return enemy_tc;
 	}
 }
 
@@ -1656,17 +1667,27 @@ bool game_play_enemy(void)
 				return false;
 			}
 			else if (src_tile->obj.type == OBJ_ENEMY_BLOB ||
-				src_tile->obj.type == OBJ_ENEMY_LEGS)
+				src_tile->obj.type == OBJ_ENEMY_LEGS ||
+				src_tile->obj.type == OBJ_ENEMY_FAST ||
+				src_tile->obj.type == OBJ_ENEMY_BIG)
 			{
-				/* A fly can move or lay an egg to an adjacent tile,
+				/* An enemy blob can move or lay an egg to an adjacent tile,
 				 * which is to be decided. */
-				bool lay_egg = rand() % 11 == 0;
+				bool lay_egg = src_tile->obj.type == OBJ_ENEMY_BLOB && rand() % 11 == 0;
 				
 				tc_t dst_tc = compute_enemy_move(src_tc, 2, true);
-				if (src_tile->obj.type == OBJ_ENEMY_LEGS &&
-					rand() % 17 != 0)
+				if (src_tile->obj.type == OBJ_ENEMY_LEGS && rand() % 3 == 0)
 				{
 					dst_tc = compute_enemy_move(dst_tc, 2, true);
+				}
+				else if (src_tile->obj.type == OBJ_ENEMY_FAST)
+				{
+					dst_tc = compute_enemy_move(dst_tc, 2, true);
+					dst_tc = compute_enemy_move(dst_tc, 2, true);
+				}
+				else if (src_tile->obj.type == OBJ_ENEMY_BIG && rand() % 4 == 0)
+				{
+					dst_tc = src_tc;
 				}
 
 				if (!tc_in_map(dst_tc) || tc_eq(src_tc, dst_tc))
@@ -1684,6 +1705,21 @@ bool game_play_enemy(void)
 					return false;
 				}
 
+				/* Handle the fact that speeders allow enemies to move to an adjacent tile
+				 * immediately, which could also be a speeder, etc.
+				 * This may (?) take us into an infinite loop, so there is a hard limit
+				 * for now. */
+				for (int i = 0; i < 60; i++)
+				{
+					if (dst_tile->obj.type != OBJ_ENEMY_SPEEDER)
+					{
+						break;
+					}
+					dst_tc = compute_enemy_move(dst_tc, 2, true);
+					dst_tile = map_tile(dst_tc);
+				}
+
+				bool lay_speeder = src_tile->obj.type == OBJ_ENEMY_LEGS && rand() % 3 == 0;
 
 				if (lay_egg)
 				{
@@ -1706,7 +1742,8 @@ bool game_play_enemy(void)
 					g_motion.dst = dst_tc;
 					g_motion.obj = src_tile->obj;
 					g_motion.obj.can_still_act = false;
-					src_tile->obj = (obj_t){0};
+					src_tile->obj =
+						lay_speeder ? (obj_t){.type = OBJ_ENEMY_SPEEDER} : (obj_t){0};
 					g_enemy_that_played_count++;
 				}
 				return false;
@@ -1733,10 +1770,14 @@ bool game_play_enemy(void)
 		return false;
 	}
 
-	int const enemy_big_spawn_number = (g_turn+1) % 5 == 0 ? 1 : 0;
-	if (g_enemy_big_already_spawn_count < enemy_big_spawn_number)
+	int const enemy_hard_spawn_number = (g_turn+1) % 5 == 0 ? 1 : 0;
+	if (g_enemy_hard_already_spawn_count < enemy_hard_spawn_number)
 	{
-		spawn_one_enemy(OBJ_ENEMY_LEGS);
+		obj_type_t type =
+			rand() % 3 == 0 ? OBJ_ENEMY_LEGS :
+			rand() % 2 == 0 ? OBJ_ENEMY_FAST :
+			OBJ_ENEMY_BIG;
+		spawn_one_enemy(type);
 		return false;
 	}
 
@@ -1895,7 +1936,7 @@ void start_enemy_phase(void)
 	g_phase = PHASE_ENEMY;
 	g_phase_time = 0;
 	g_enemy_already_spawn_count = 0;
-	g_enemy_big_already_spawn_count = 0;
+	g_enemy_hard_already_spawn_count = 0;
 	map_clear_options();
 	map_clear_selected();
 	map_clear_can_still_act();
@@ -1906,7 +1947,7 @@ void start_enemy_phase(void)
 		tc_iter_all_cond(&it); tc_iter_all_next(&it))
 	{
 		tile_t* tile = map_tile(it.tc);
-		if (obj_type_is_enemy(tile->obj.type))
+		if (obj_type_is_enemy(tile->obj.type) && tile->obj.type != OBJ_ENEMY_SPEEDER)
 		{
 			tile->obj.can_still_act = true;
 			g_enemy_count++;
@@ -2398,6 +2439,27 @@ int main(int argc, char const* const* argv)
 									int incr = event.key.keysym.sym == SDLK_a ? 1 : -1;
 									selected->obj.type =
 										cool_mod(selected->obj.type + incr, OBJ_NUMBER);
+								}
+							}
+						break;
+						case SDLK_z:
+						case SDLK_s:
+							if (g_debug)
+							{
+								tile_t* selected = map_selected_tile();
+								if (selected != NULL)
+								{
+									selected->obj.life += event.key.keysym.sym == SDLK_z ? 1 : -1;
+								}
+							}
+						break;
+						case SDLK_e:
+							if (g_debug)
+							{
+								tile_t* selected = map_selected_tile();
+								if (selected != NULL)
+								{
+									selected->obj.ammo++;
 								}
 							}
 						break;
