@@ -76,7 +76,15 @@ void cleanup_sprite_sheet(void)
 void draw_sprite(sprite_t sprite, SDL_Rect const* dst_rect)
 {
 	assert(s_sprite_sheet_texture_table != NULL);
-	SDL_RenderCopy(g_renderer,
-		s_sprite_sheet_texture_table[s_sprite_rect_table[sprite].sheet_index],
-		&s_sprite_rect_table[sprite].rect, dst_rect);
+	SDL_Texture* texture = s_sprite_sheet_texture_table[s_sprite_rect_table[sprite].sheet_index];
+	SDL_RenderCopy(g_renderer, texture, &s_sprite_rect_table[sprite].rect, dst_rect);
+}
+
+void draw_sprite_colored(sprite_t sprite, SDL_Rect const* dst_rect, rgb_t color)
+{
+	assert(s_sprite_sheet_texture_table != NULL);
+	SDL_Texture* texture = s_sprite_sheet_texture_table[s_sprite_rect_table[sprite].sheet_index];
+	SDL_SetTextureColorMod(texture, color.r, color.g, color.b);
+	SDL_RenderCopy(g_renderer, texture, &s_sprite_rect_table[sprite].rect, dst_rect);
+	SDL_SetTextureColorMod(texture, 255, 255, 255);
 }

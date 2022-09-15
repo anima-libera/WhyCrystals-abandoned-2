@@ -48,4 +48,12 @@ void cleanup_sprite_sheet(void);
 
 void draw_sprite(sprite_t sprite, SDL_Rect const* dst_rect);
 
+struct rgb_t
+{
+	unsigned char r, g, b;
+};
+typedef struct rgb_t rgb_t;
+
+void draw_sprite_colored(sprite_t sprite, SDL_Rect const* dst_rect, rgb_t color);
+
 #endif /* WHYCRYSTALS_HEADER_SPRITES_ */

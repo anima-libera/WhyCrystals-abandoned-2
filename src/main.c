@@ -273,12 +273,6 @@ tc_t sc_to_tc(sc_t sc)
 	return tc;
 }
 
-struct rgb_t
-{
-	unsigned char r, g, b;
-};
-typedef struct rgb_t rgb_t;
-
 void draw_text_ex(char const* text, rgb_t color,
 	sc_t sc, bool center_x, bool center_y,
 	bool bg, rgb_t bg_color)
@@ -349,12 +343,50 @@ enum obj_type_t
 };
 typedef enum obj_type_t obj_type_t;
 
+enum effect_t
+{
+	EFFECT_PARALIZED,
+	EFFECT_CANCER,
+
+	EFFECT_NUMBER
+};
+typedef enum effect_t effect_t; 
+
+rgb_t effect_color(effect_t effect)
+{
+	switch (effect)
+	{
+		case EFFECT_PARALIZED:
+			return (rgb_t){255, 255, 0};
+		case EFFECT_CANCER:
+			return (rgb_t){200, 0, 0};
+		default:
+			assert(false);
+			exit(EXIT_FAILURE);
+	}
+}
+
+char effect_letter(effect_t effect)
+{
+	switch (effect)
+	{
+		case EFFECT_PARALIZED:
+			return 'P';
+		case EFFECT_CANCER:
+			return 'C';
+		default:
+			assert(false);
+			exit(EXIT_FAILURE);
+	}
+}
+
 struct obj_t
 {
 	obj_type_t type;
 	bool can_still_act;
 	int ammo; /* Used by towers. */
 	int life; /* Used by big enemies. */
+	bool effects[EFFECT_NUMBER];
 	int sprite_variant;
 };
 typedef struct obj_t obj_t;
@@ -406,7 +438,15 @@ void draw_obj(obj_t const* obj, sc_t sc, int side)
 		obj_rect.y -= g_tile_side_pixels;
 		obj_rect.h *= 2;
 	}
-	draw_sprite(sprite, &obj_rect);
+	rgb_t color = {255, 255, 255};
+	for (int i = 0; i < EFFECT_NUMBER; i++)
+	{
+		if (obj->effects[i])
+		{
+			color = effect_color(i);
+		}
+	}
+	draw_sprite_colored(sprite, &obj_rect, color);
 
 	/* Draw the can-still-act indicator. */
 	if (obj->can_still_act)
@@ -675,36 +715,53 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 	/* Draw the object that is on the tile. */
 	draw_obj(&tile->obj, sc, side);
 
+	SDL_Rect text_rect = rect;
+	text_rect.y -= 18;
+	text_rect.w = 18;
+	text_rect.h = 18;
+
 	/* Draw the tower ammo count. */
 	if ((obj_type_is_tower(tile->obj.type) && tile->obj.ammo > 0) &&
 		(tile->is_selected || tile->is_hovered || SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT]))
 	{
-		SDL_Rect text_rect = rect;
-		text_rect.y -= 18;
-		text_rect.w = 18;
-		text_rect.h = 18;
 		SDL_SetRenderDrawColor(g_renderer, 255, 255, 255, 255);
 		SDL_RenderFillRect(g_renderer, &text_rect);
-		sc_t text_sc = {.x = rect.x, .y = rect.y - 22};
+		sc_t text_sc = {.x = text_rect.x, .y = text_rect.y - 4};
 		char string[20];
 		sprintf(string, "%d", tile->obj.ammo);
 		draw_text(string, (rgb_t){0, 0, 0}, text_sc);
+		text_rect.y -= text_rect.h;
 	}
 
 	/* Draw the life count. */
 	if (obj_type_is_enemy(tile->obj.type) && tile->obj.life >= 2 &&
 		(tile->is_selected || tile->is_hovered || SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT]))
 	{
-		SDL_Rect text_rect = rect;
-		text_rect.y -= 18;
-		text_rect.w = 18;
-		text_rect.h = 18;
 		SDL_SetRenderDrawColor(g_renderer, 255, 255, 255, 255);
 		SDL_RenderFillRect(g_renderer, &text_rect);
-		sc_t text_sc = {.x = rect.x, .y = rect.y - 22};
+		sc_t text_sc = {.x = text_rect.x, .y = text_rect.y - 4};
 		char string[20];
 		sprintf(string, "%d", tile->obj.life);
 		draw_text(string, (rgb_t){0, 0, 255}, text_sc);
+		text_rect.y -= text_rect.h;
+	}
+
+	/* Draw the effect letters. */
+	if ((tile->is_selected || tile->is_hovered || SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT]))
+	{
+		for (int i = 0; i < EFFECT_NUMBER; i++)
+		{
+			if (tile->obj.effects[i])
+			{
+				SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
+				SDL_RenderFillRect(g_renderer, &text_rect);
+				sc_t text_sc = {.x = text_rect.x, .y = text_rect.y - 4};
+				char string[20];
+				sprintf(string, "%c", effect_letter(i));
+				draw_text(string, effect_color(i), text_sc);
+				text_rect.y -= text_rect.h;
+			}
+		}
 	}
 }
 
@@ -1670,6 +1727,13 @@ bool game_play_enemy(void)
 				src_tile->obj.type == OBJ_ENEMY_FAST ||
 				src_tile->obj.type == OBJ_ENEMY_BIG)
 			{
+				if (src_tile->obj.effects[EFFECT_CANCER] && rand() % 6 == 0)
+				{
+					src_tile->obj = (obj_t){0};
+					g_enemy_count--;
+					return false;
+				}
+
 				/* An enemy blob can move or lay an egg to an adjacent tile,
 				 * which is to be decided. */
 				bool lay_egg = src_tile->obj.type == OBJ_ENEMY_BLOB && rand() % 11 == 0;
@@ -1685,6 +1749,11 @@ bool game_play_enemy(void)
 					dst_tc = compute_enemy_move(dst_tc, 2, true);
 				}
 				else if (src_tile->obj.type == OBJ_ENEMY_BIG && rand() % 4 == 0)
+				{
+					dst_tc = src_tc;
+				}
+
+				if (src_tile->obj.effects[EFFECT_PARALIZED] && rand() % 10 != 0)
 				{
 					dst_tc = src_tc;
 				}
@@ -2477,6 +2546,18 @@ int main(int argc, char const* const* argv)
 								if (selected != NULL)
 								{
 									selected->obj.ammo++;
+								}
+							}
+						break;
+						case SDLK_r:
+							if (g_debug)
+							{
+								tile_t* selected = map_selected_tile();
+								if (selected != NULL)
+								{
+									effect_t effect = rand() % EFFECT_NUMBER;
+									selected->obj.effects[effect] =
+										!selected->obj.effects[effect];
 								}
 							}
 						break;
