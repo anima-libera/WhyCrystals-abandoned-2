@@ -1718,7 +1718,7 @@ bool game_play_enemy(void)
 					dst_tile = map_tile(dst_tc);
 				}
 
-				bool lay_speeder = src_tile->obj.type == OBJ_ENEMY_LEGS && rand() % 2 == 0;
+				bool lay_speeder = src_tile->obj.type == OBJ_ENEMY_LEGS && rand() % 3 != 0;
 
 				if (lay_egg)
 				{
@@ -1769,7 +1769,7 @@ bool game_play_enemy(void)
 		return false;
 	}
 
-	int const enemy_hard_spawn_number = (g_turn+1) % 5 == 0 ? 1 : 0;
+	int const enemy_hard_spawn_number = (g_turn+1) % 5 == 0 ? 5 : 0;
 	if (g_enemy_hard_already_spawn_count < enemy_hard_spawn_number)
 	{
 		obj_type_t type =
@@ -2266,7 +2266,7 @@ void draw_shop_entry(shop_entry_def_t* def, shop_entry_t entry)
 
 shop_entry_def_t g_shop_table[] = {
 	[SHOP_ENTRY_TEST] = {.cost = 3, .name = "PRINT \"TEST\" (NOT WORTH IT)"},
-	[SHOP_ENTRY_MULTIACT] = {.cost = 20, .name = "MULTIACT MACHINE"}};
+	[SHOP_ENTRY_MULTIACT] = {.cost = 14, .name = "MULTIACT MACHINE"}};
 
 void draw_shop(void)
 {
