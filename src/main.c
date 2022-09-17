@@ -33,6 +33,8 @@ int min(int a, int b)
  * Notice how the first argument must be an expression that evaluates
  * to the new length of the dynamic array (and if it has the side effect
  * of updating the length variable it is even better).
+ * Do NOT fall into the trap of POST-incrementing the length (which will
+ * not evaluate to the new desired length as it should).
  * The new elements are not initialized. */
 #define DA_LENGTHEN(len_expr_, cap_, array_ptr_, elem_type_) \
 	do { \
@@ -490,6 +492,97 @@ bool option_is_tower(option_t option)
 	}
 }
 
+enum step_type_t
+{
+	STEP_MOVE_WALK,
+	STEP_MOVE_JUMP,
+	STEP_MOVE_KILL,
+	STEP_DIRECT_HIT,
+};
+typedef enum step_type_t step_type_t;
+
+bool step_type_is_move(step_type_t type)
+{
+	switch (type)
+	{
+		case STEP_MOVE_WALK:
+		case STEP_MOVE_JUMP:
+		case STEP_MOVE_KILL:
+			return true;
+		default:
+			return false;
+	}
+}
+
+struct step_move_t
+{
+	step_type_t type;
+	tc_t src, dst;
+};
+typedef struct step_move_t step_move_t;
+
+union step_t
+{
+	step_type_t type;
+	step_move_t move;
+};
+typedef union step_t step_t;
+
+struct move_plan_t
+{
+	tc_t src;
+	int len, cap;
+	step_t* da;
+};
+typedef struct move_plan_t move_plan_t;
+
+move_plan_t g_move_plan;
+bool g_move_plan_happening;
+int g_move_plan_current_step;
+int g_move_plan_next_step;
+
+move_plan_t move_plan_create(tc_t src)
+{
+	return (move_plan_t){.src = src};
+}
+
+void move_plan_cleanup(move_plan_t* plan)
+{
+	free(plan->da);
+	*plan = (move_plan_t){0};
+}
+
+void move_plan_add_end(move_plan_t* plan, step_t step)
+{
+	DA_LENGTHEN(plan->len += 1, plan->cap, plan->da, step_t);
+	plan->da[plan->len-1] = step;
+}
+
+void move_plan_add_beginning(move_plan_t* plan, step_t step)
+{
+	DA_LENGTHEN(plan->len += 1, plan->cap, plan->da, step_t);
+	for (int i = plan->len-1; i > 0; i--)
+	{
+		plan->da[i] = plan->da[i-1];
+	}
+	plan->da[0] = step;
+	assert(step_type_is_move(step.type));
+	plan->src = step.move.src;
+}
+
+tc_t move_plan_dst(move_plan_t const* plan)
+{
+	if (plan->len == 0)
+	{
+		return plan->src;
+	}
+	else
+	{
+		assert(step_type_is_move(plan->da[plan->len-1].type));
+		return plan->da[plan->len-1].move.dst;
+	}
+}
+
 struct tile_t
 {
 	floor_type_t floor;
@@ -498,6 +591,13 @@ struct tile_t
 	bool is_hovered;
 	bool is_selected;
 	bool options[OPTION_NUMBER];
+	/* If the walk option is available, then this is the plan that describes
+	 * how to move to this tile. */
+	move_plan_t option_move_plan;
+	/* If an other tile is hovered and has a move plan, then this move plan
+	 * should be displayed and this boolean is `true` iff this tile is in that
+	 * move plan. */
+	bool is_in_move_plan;
 };
 typedef struct tile_t tile_t;
 
@@ -626,6 +726,21 @@ void draw_tile(tile_t const* tile, sc_t sc, int side)
 	SDL_RenderFillRect(g_renderer, &rect);
 	sprite_t sprite = SPRITE_GRASSLAND_0 + tile->sprite_variant;
 	draw_sprite(sprite, &rect);
+
+	/* Draw a part of the move plan. */
+	if (tile->is_in_move_plan)
+	{
+		SDL_Rect plan_rect = rect;
+		int const margin = 10;
+		plan_rect.x += margin;
+		plan_rect.y += margin;
+		plan_rect.w -= margin * 2;
+		plan_rect.h -= margin * 2;
+		SDL_SetRenderDrawColor(g_renderer, 255, 255, 255, 100);
+		SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
+		SDL_RenderFillRect(g_renderer, &plan_rect);
+		SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_NONE);
+	}
 
 	/* Draw additional UI square around the tile. */
 	if (tile->is_selected)
@@ -1002,6 +1117,15 @@ void map_clear_options(void)
 	}
 }
 
+void map_clear_hovered_move_plan(void)
+{
+	for (tc_iter_all_t it = tc_iter_all_init();
+		tc_iter_all_cond(&it); tc_iter_all_next(&it))
+	{
+		map_tile(it.tc)->is_in_move_plan = false;
+	}
+}
+
 void map_clear_hovered(void)
 {
 	for (tc_iter_all_t it = tc_iter_all_init();
@@ -1094,10 +1218,27 @@ void handle_mouse_motion(sc_t sc)
 	{
 		/* Update the hovered tile. */
 		map_clear_hovered();
+		map_clear_hovered_move_plan();
 		tile_t* tile = map_tile(sc_to_tc(sc));
 		if (tile != NULL)
 		{
 			tile->is_hovered = true;
+
+			/* Enable the display of the move plan to the hovered tile.
+			 * All the tiles that are part of the move plan are told that
+			 * they may have something to display. */
+			if (tile->options[OPTION_WALK])
+			{
+				g_move_plan = tile->option_move_plan;
+				move_plan_t* plan = &tile->option_move_plan;
+				map_tile(plan->src)->is_in_move_plan = true;
+				for (int i = 0; i < plan->len; i++)
+				{
+					assert(step_type_is_move(plan->da[i].type));
+					map_tile(plan->da[i].move.src)->is_in_move_plan = true;
+					map_tile(plan->da[i].move.dst)->is_in_move_plan = true;
+				}
+			}
 		}
 	}
 }
@@ -1127,8 +1268,7 @@ bool g_game_over;
 struct path_internal_t
 {
 	bool exists;
-	tc_t next_tc;
-	int length;
+	move_plan_t plan;
 };
 typedef struct path_internal_t path_internal_t;
 
@@ -1138,7 +1278,7 @@ path_internal_t path_internal(tc_t src, tc_t dst, int max_length)
 	{
 		return (path_internal_t){
 			.exists = true,
-			.length = 0};
+			.plan = move_plan_create(src)};
 	}
 	else if (max_length <= 0)
 	{
@@ -1155,13 +1295,22 @@ path_internal_t path_internal(tc_t src, tc_t dst, int max_length)
 		{
 			if (map_tile(src_neighbors[i])->obj.type == OBJ_NONE)
 			{
+				/* Here we do a little recurtion by moving the source, so the results (if any)
+				 * from the recurtion are starting from tiles accessible from the given `src`.
+				 * Thus the step that we add here is from the given `src` to the src of the
+				 * recurtion result (so at the beginning of the path produced by the recurtion).
+				 * Mmm idk if this is clear... */
 				path_internal_t rec = path_internal(src_neighbors[i], dst, max_length - 1);
 				if (rec.exists)
 				{
+					step_t step;
+					step.move.type = STEP_MOVE_WALK;
+					step.move.src = src;
+					step.move.dst = rec.plan.src;
+					move_plan_add_beginning(&rec.plan, step);
 					return (path_internal_t){
 						.exists = true,
-						.next_tc = rec.next_tc,
-						.length = rec.length + 1};
+						.plan = rec.plan};
 				}
 			}
 		}
@@ -1171,13 +1320,19 @@ path_internal_t path_internal(tc_t src, tc_t dst, int max_length)
 
 bool path_exists(tc_t src, tc_t dst, int max_length)
 {
-	return path_internal(src, dst, max_length).exists;
+	/* TODO: Optimize. This is extremely inefficient. */
+	path_internal_t path = path_internal(src, dst, max_length);
+	move_plan_cleanup(&path.plan);
+	return path.exists;
 }
 
-tc_t path_next_tc(tc_t src, tc_t dst, int max_length)
+move_plan_t path_move_plan(tc_t src, tc_t dst, int max_length)
 {
-	return path_internal(src, dst, max_length).next_tc;
+	path_internal_t path = path_internal(src, dst, max_length);
+	assert(path.exists);
+	return path.plan;
 }
+
 
 bool obj_type_is_unit(obj_type_t type)
 {
@@ -1250,6 +1405,12 @@ void update_selected_unit_options(tc_t unit_tc)
 						break;
 					}
 					tile->options[OPTION_WALK] = true;
+					tile->option_move_plan = move_plan_create(unit_tc);
+					move_plan_add_end(&tile->option_move_plan,
+						(step_t){.move = {
+							.type = STEP_MOVE_WALK,
+							.src = unit_tc,
+							.dst = tc}});
 				}
 			}
 		}
@@ -1284,8 +1445,12 @@ void update_selected_unit_options(tc_t unit_tc)
 				tc_dist(unit_tc, it.tc) == 3 &&
 				map_tile(it.tc)->obj.type == OBJ_NONE);
 		tile_t* tile = map_tile(it.tc);
-		tile->options[OPTION_WALK] |=
-			path_exists(unit_tc, it.tc, walk_dist);
+		path_internal_t path = path_internal(unit_tc, it.tc, walk_dist);
+		if (path.exists)
+		{
+			tile->options[OPTION_WALK] = true;
+			tile->option_move_plan = path.plan;
+		}
 		tile->options[OPTION_TOWER_YELLOW] |=
 			g_tower_available &&
 			tower_and_machines;
@@ -1307,13 +1472,11 @@ void perform_option(tc_t unit_tc, tc_t dst_tc, option_t option)
 	switch (option)
 	{
 		case OPTION_WALK:
-			g_motion.t = 0;
-			g_motion.t_max = 7;
-			g_motion.src = unit_tc;
-			g_motion.dst = dst_tc;
-			g_motion.obj = unit_tile->obj;
-			g_motion.obj.can_still_act = false;
-			unit_tile->obj = (obj_t){0};
+			g_move_plan = map_tile(dst_tc)->option_move_plan;
+			g_move_plan_happening = true;
+			g_move_plan_current_step = 0;
+			g_move_plan_next_step = 0;
+			unit_tile->obj.can_still_act = false;
 			map_clear_options();
 		break;
 		case OPTION_TOWER_YELLOW:
@@ -2208,6 +2371,27 @@ void game_perform(void)
 		}
 		g_motion.t++;
 	}
+	else if (g_move_plan_happening)
+	{
+		g_move_plan_current_step = g_move_plan_next_step;
+		g_move_plan_next_step++;
+		if (g_move_plan_current_step < g_move_plan.len)
+		{
+			assert(step_type_is_move(g_move_plan.da[g_move_plan_current_step].type));
+			step_move_t* step = &g_move_plan.da[g_move_plan_current_step].move;
+			tile_t* src_tile = map_tile(step->src);
+			g_motion.t = 0;
+			g_motion.t_max = 3;
+			g_motion.src = step->src;
+			g_motion.dst = step->dst;
+			g_motion.obj = src_tile->obj;
+			src_tile->obj = (obj_t){0};
+		}
+		else
+		{
+			g_move_plan_happening = false;
+		}
+	}
 	else if (g_phase == PHASE_ENEMY)
 	{
 		g_phase_time++;
@@ -2454,6 +2638,7 @@ int main(int argc, char const* const* argv)
 		g_grassland_color.b = 77;
 	}
 	
+	g_move_plan_happening = false;
 	g_motion = (motion_t){0};
 	map_generate();
 	center_view(g_crystal_tc);
