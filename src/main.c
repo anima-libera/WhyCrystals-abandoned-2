@@ -1763,7 +1763,7 @@ void spawn_one_enemy(obj_type_t type)
 	g_motion.obj = (obj_t){.type = type};
 	if (g_motion.obj.type == OBJ_ENEMY_BIG)
 	{
-		g_motion.obj.life = 5;
+		g_motion.obj.life = 4;
 	}
 	g_motion.obj.can_still_act = false;
 
@@ -1901,7 +1901,7 @@ bool game_play_enemy(void)
 
 				/* An enemy blob can move or lay an egg to an adjacent tile,
 				 * which is to be decided. */
-				bool lay_egg = src_tile->obj.type == OBJ_ENEMY_BLOB && rand() % 11 == 0;
+				bool lay_egg = src_tile->obj.type == OBJ_ENEMY_BLOB && rand() % 13 == 0;
 
 				move_plan_t plan = move_plan_create(src_tc);
 
@@ -2039,7 +2039,7 @@ bool game_play_enemy(void)
 		return false;
 	}
 
-	int const enemy_hard_spawn_number = (g_turn+1) % 5 == 0 ? 5 : 0;
+	int const enemy_hard_spawn_number = (g_turn+1) % 5 == 0 ? 3 : 0;
 	if (g_enemy_hard_already_spawn_count < enemy_hard_spawn_number)
 	{
 		obj_type_t type =
@@ -2440,7 +2440,7 @@ void game_perform(void)
 	else if (g_phase == PHASE_ENEMY)
 	{
 		g_phase_time++;
-		if (g_phase_time % 3 == 0)
+		if (g_phase_time % 2 == 0)
 		{
 			bool const enemy_is_done = game_play_enemy();
 			if (enemy_is_done)
