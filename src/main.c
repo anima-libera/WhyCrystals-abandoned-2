@@ -495,6 +495,7 @@ bool option_is_tower(option_t option)
 enum step_type_t
 {
 	STEP_MOVE_WALK,
+	STEP_MOVE_WALK_LAY_SPEEDER,
 	STEP_MOVE_JUMP,
 	STEP_MOVE_KILL,
 	STEP_DIRECT_HIT,
@@ -506,6 +507,7 @@ bool step_type_is_move(step_type_t type)
 	switch (type)
 	{
 		case STEP_MOVE_WALK:
+		case STEP_MOVE_WALK_LAY_SPEEDER:
 		case STEP_MOVE_JUMP:
 		case STEP_MOVE_KILL:
 			return true;
@@ -1900,16 +1902,50 @@ bool game_play_enemy(void)
 				/* An enemy blob can move or lay an egg to an adjacent tile,
 				 * which is to be decided. */
 				bool lay_egg = src_tile->obj.type == OBJ_ENEMY_BLOB && rand() % 11 == 0;
+
+				move_plan_t plan = move_plan_create(src_tc);
+
+				step_type_t step_type = src_tile->obj.type == OBJ_ENEMY_LEGS && rand() % 4 != 0 ?
+					STEP_MOVE_WALK_LAY_SPEEDER : STEP_MOVE_WALK;
 				
 				tc_t dst_tc = compute_enemy_move(src_tc, 2, true);
+				if (!tc_eq(move_plan_dst(&plan), dst_tc))
+				{
+					move_plan_add_end(&plan, (step_t){.move = {
+						.type = step_type,
+						.src = move_plan_dst(&plan),
+						.dst = dst_tc}});
+				}
+
 				if (src_tile->obj.type == OBJ_ENEMY_LEGS && rand() % 3 == 0)
 				{
 					dst_tc = compute_enemy_move(dst_tc, 2, true);
+					if (!tc_eq(move_plan_dst(&plan), dst_tc))
+					{
+						move_plan_add_end(&plan, (step_t){.move = {
+							.type = step_type,
+							.src = move_plan_dst(&plan),
+							.dst = dst_tc}});
+					}
 				}
 				else if (src_tile->obj.type == OBJ_ENEMY_FAST)
 				{
 					dst_tc = compute_enemy_move(dst_tc, 2, true);
+					if (!tc_eq(move_plan_dst(&plan), dst_tc))
+					{
+						move_plan_add_end(&plan, (step_t){.move = {
+							.type = STEP_MOVE_WALK,
+							.src = move_plan_dst(&plan),
+							.dst = dst_tc}});
+					}
 					dst_tc = compute_enemy_move(dst_tc, 2, true);
+					if (!tc_eq(move_plan_dst(&plan), dst_tc))
+					{
+						move_plan_add_end(&plan, (step_t){.move = {
+							.type = STEP_MOVE_WALK,
+							.src = move_plan_dst(&plan),
+							.dst = dst_tc}});
+					}
 				}
 				else if (src_tile->obj.type == OBJ_ENEMY_BIG && rand() % 4 == 0)
 				{
@@ -1940,17 +1976,22 @@ bool game_play_enemy(void)
 				 * immediately, which could also be a speeder, etc.
 				 * This may (?) take us into an infinite loop, so there is a hard limit
 				 * for now. */
-				for (int i = 0; i < 60; i++)
+				for (int i = 0; i < 10; i++)
 				{
 					if (dst_tile->obj.type != OBJ_ENEMY_SPEEDER)
 					{
 						break;
 					}
 					dst_tc = compute_enemy_move(dst_tc, 2, true);
+					if (!tc_eq(move_plan_dst(&plan), dst_tc))
+					{
+						move_plan_add_end(&plan, (step_t){.move = {
+							.type = STEP_MOVE_WALK_LAY_SPEEDER,
+							.src = move_plan_dst(&plan),
+							.dst = dst_tc}});
+					}
 					dst_tile = map_tile(dst_tc);
 				}
-
-				bool lay_speeder = src_tile->obj.type == OBJ_ENEMY_LEGS && rand() % 3 != 0;
 
 				if (lay_egg)
 				{
@@ -1967,14 +2008,11 @@ bool game_play_enemy(void)
 				}
 				else
 				{
-					g_motion.t = 0;
-					g_motion.t_max = 6;
-					g_motion.src = src_tc;
-					g_motion.dst = dst_tc;
-					g_motion.obj = src_tile->obj;
-					g_motion.obj.can_still_act = false;
-					src_tile->obj =
-						lay_speeder ? (obj_t){.type = OBJ_ENEMY_SPEEDER} : (obj_t){0};
+					g_move_plan = plan;
+					g_move_plan_happening = true;
+					g_move_plan_current_step = 0;
+					g_move_plan_next_step = 0;
+					src_tile->obj.can_still_act = false;
 					g_enemy_that_played_count++;
 				}
 				return false;
@@ -2385,7 +2423,14 @@ void game_perform(void)
 			g_motion.src = step->src;
 			g_motion.dst = step->dst;
 			g_motion.obj = src_tile->obj;
-			src_tile->obj = (obj_t){0};
+			if (step->type == STEP_MOVE_WALK_LAY_SPEEDER)
+			{
+				src_tile->obj = (obj_t){.type = OBJ_ENEMY_SPEEDER};
+			}
+			else
+			{
+				src_tile->obj = (obj_t){0};
+			}
 		}
 		else
 		{
