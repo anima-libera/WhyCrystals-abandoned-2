@@ -318,6 +318,7 @@ enum obj_type_t
 	OBJ_NONE = 0,
 	OBJ_ROCK,
 	OBJ_TREE,
+	OBJ_ORANGE_BUSH,
 	OBJ_CRYSTAL,
 	OBJ_UNIT_BASIC,
 	OBJ_UNIT_WALKER,
@@ -404,8 +405,9 @@ void draw_obj(obj_t const* obj, sc_t sc, int side)
 	switch (obj->type)
 	{
 		case OBJ_NONE:             return;
-		case OBJ_ROCK:             sprite = SPRITE_ROCK_1 + obj->sprite_variant;         break;
+		case OBJ_ROCK:             sprite = SPRITE_ROCK_1 + obj->sprite_variant; break;
 		case OBJ_TREE:             sprite = SPRITE_TREE;             tall_sprite = true; break;
+		case OBJ_ORANGE_BUSH:      sprite = SPRITE_ORANGE_BUSH;      break;
 		case OBJ_CRYSTAL:          sprite = SPRITE_CRYSTAL;          tall_sprite = true; break;
 		case OBJ_UNIT_WALKER:      sprite = SPRITE_UNIT_WALKER;      break;
 		case OBJ_UNIT_BASIC:       sprite = SPRITE_UNIT_BASIC;       break;
@@ -918,11 +920,13 @@ bool tc_in_map(tc_t tc)
 
 int g_generation_rock;
 int g_generation_tree;
+int g_generation_orange_bush;
 
 void generate_map_generator(void)
 {
 	g_generation_rock = rand() % 1500;
 	g_generation_tree = rand() % 3000;
+	g_generation_orange_bush = (rand() % 200) * (rand() % 4 == 0);
 }
 
 void generate_tile(tile_t* tile, tc_t tc)
@@ -947,6 +951,10 @@ void generate_tile(tile_t* tile, tc_t tc)
 	else if ((r -= g_generation_tree) < 0)
 	{
 		tile->obj.type = OBJ_TREE;
+	}
+	else if ((r -= g_generation_orange_bush) < 0)
+	{
+		tile->obj.type = OBJ_ORANGE_BUSH;
 	}
 }
 

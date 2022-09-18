@@ -20,6 +20,7 @@ static sprite_ref_t s_sprite_rect_table[] = {
 	[SPRITE_ROCK_2] =           {1, R16( 3, 5, 1, 1)},
 	[SPRITE_ROCK_3] =           {1, R16( 4, 5, 1, 1)},
 	[SPRITE_TREE] =             {1, R16( 1, 4, 1, 2)},
+	[SPRITE_ORANGE_BUSH] =      {1, R16( 2, 8, 1, 1)},
 	[SPRITE_CRYSTAL] =          {1, R16( 0, 4, 1, 2)},
 	[SPRITE_GRASSLAND_0] =      {1, R16( 4, 0, 1, 1)},
 	[SPRITE_GRASSLAND_1] =      {1, R16( 5, 0, 1, 1)},
