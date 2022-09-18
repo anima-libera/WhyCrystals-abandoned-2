@@ -608,23 +608,6 @@ void tile_init(tile_t* tile)
 	*tile = (tile_t){0};
 
 	tile->floor = FLOOR_GRASSLAND;
-
-	tile->sprite_variant = 0;
-	if (rand() % 10 == 0)
-	{
-		tile->sprite_variant = 1 + rand() % 3;
-	}
-
-	tile->obj = (obj_t){.type = OBJ_NONE};
-	if (rand() % 10 == 0)
-	{
-		tile->obj.type = OBJ_TREE;
-	}
-	else if (rand() % 40 == 0)
-	{
-		tile->obj.type = OBJ_ROCK;
-		tile->obj.sprite_variant = rand() % 3;
-	}
 }
 
 bool tile_has_options(tile_t const* tile)
@@ -711,11 +694,22 @@ option_t tile_selected_option(tile_t const* tile)
 bool obj_type_is_tower(obj_type_t type);
 bool obj_type_is_enemy(obj_type_t type);
 
-/* The original color was (109, 216, 37).
- * There is also (30, 137, 77) that feels good (and it could be nice to have the color be
- * chosen at random) but some colors of map ui elements are really hard to look at in front
- * of this color. */
-rgb_t g_grassland_color = {109, 216, 37};
+rgb_t g_grassland_color;
+
+void generate_grassland_color(void)
+{
+	/* The original color was (109, 216, 37).
+	 * There is also (30, 137, 77) that feels good (and it could be nice to have the color be
+	 * chosen at random) but some colors of map ui elements may be a bit hard to look at 
+	 * when in front of this color. */
+
+	rgb_t bright = {109, 216, 37};
+	rgb_t dark = {30, 137, 77};
+
+	g_grassland_color.r = rand() % 2 == 0 ? bright.r : dark.r;
+	g_grassland_color.g = rand() % 2 == 0 ? bright.g : dark.g;
+	g_grassland_color.b = rand() % 2 == 0 ? bright.b : dark.b;
+}
 
 void draw_tile(tile_t const* tile, sc_t sc, int side)
 {
@@ -922,6 +916,40 @@ bool tc_in_map(tc_t tc)
 	return false;
 }
 
+int g_generation_rock;
+int g_generation_tree;
+
+void generate_map_generator(void)
+{
+	g_generation_rock = rand() % 1500;
+	g_generation_tree = rand() % 3000;
+}
+
+void generate_tile(tile_t* tile, tc_t tc)
+{
+	(void)tc;
+
+	tile->floor = FLOOR_GRASSLAND;
+
+	tile->sprite_variant = 0;
+	if (rand() % 10 == 0)
+	{
+		tile->sprite_variant = 1 + rand() % 3;
+	}
+
+	tile->obj = (obj_t){.type = OBJ_NONE};
+	int r = rand() % 10000;
+	if ((r -= g_generation_rock) < 0)
+	{
+		tile->obj.type = OBJ_ROCK;
+		tile->obj.sprite_variant = rand() % 3;
+	}
+	else if ((r -= g_generation_tree) < 0)
+	{
+		tile->obj.type = OBJ_TREE;
+	}
+}
+
 bool g_some_chunks_are_new = false;
 
 tile_t* map_tile(tc_t tc)
@@ -955,6 +983,10 @@ tile_t* map_tile(tc_t tc)
 	for (int i = 0; i < CHUNK_SIDE * CHUNK_SIDE; i++)
 	{
 		tile_init(&chunk->tiles[i]);
+		tc_t tc = {
+			.x = chunk->top_left_tc.x + i % CHUNK_SIDE,
+			.y = chunk->top_left_tc.y + i / CHUNK_SIDE};
+		generate_tile(&chunk->tiles[i], tc);
 	}
 	int inchunk_x = tc.x - chunk->top_left_tc.x;
 	int inchunk_y = tc.y - chunk->top_left_tc.y;
@@ -1030,35 +1062,10 @@ void draw_map(void)
 	}
 }
 
-void map_generate(void)
+int tc_dist(tc_t a, tc_t b);
+
+void map_center_generate(void)
 {
-	for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect((tc_t){0, 0}, 8));
-		tc_iter_rect_cond(&it); tc_iter_rect_next(&it))
-	{
-		tile_t* tile = map_tile(it.tc);
-		*tile = (tile_t){0};
-
-		if (rand() % 10 == 0)
-		{
-			tile->sprite_variant = 1 + rand() % 3;
-		}
-
-		tile->obj = (obj_t){0};
-		if (rand() % 17 == 1)
-		{
-			tile->obj.type = OBJ_ENEMY_BLOB;
-		}
-		else if (rand() % 13 == 3)
-		{
-			tile->obj.type = OBJ_ROCK;
-			tile->obj.sprite_variant = rand() % 3;
-		}
-		else if (rand() % 13 == 3)
-		{
-			tile->obj.type = OBJ_TREE;
-		}
-	}
-
 	/* Place the crystal somewhere near the middle of the map. */
 	g_crystal_tc = (tc_t){
 		rand() % 5 - 2,
@@ -1097,15 +1104,14 @@ void map_generate(void)
 			OBJ_MACHINE_MULTIACT,
 		.ammo = 2 + rand() % 2};
 
-	/* Making sure that enemies close to the crystal are eggs so that the player
-	 * has some time to take action against them. */
-	for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect(g_crystal_tc, 3));
+	/* Place a few eggs nearby. */
+	for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect(g_crystal_tc, 9));
 		tc_iter_rect_cond(&it); tc_iter_rect_next(&it))
 	{
-		tile_t* tile = map_tile(it.tc);
-		if (tile->obj.type == OBJ_ENEMY_BLOB)
+		int dist = tc_dist(g_crystal_tc, it.tc);
+		if (4 <= dist && dist <= 9 && rand() % 30 == 0)
 		{
-			tile->obj.type = OBJ_ENEMY_EGG;
+			map_tile(it.tc)->obj.type = OBJ_ENEMY_EGG;
 		}
 	}
 }
@@ -2676,16 +2682,13 @@ int main(int argc, char const* const* argv)
 
 	init_sprite_sheet();
 
-	if (rand() % 10 == 0)
-	{
-		g_grassland_color.r = 30;
-		g_grassland_color.g = 137;
-		g_grassland_color.b = 77;
-	}
+	generate_grassland_color();
 	
+	generate_map_generator();
+	map_center_generate();
+
 	g_move_plan_happening = false;
 	g_motion = (motion_t){0};
-	map_generate();
 	center_view(g_crystal_tc);
 
 	if (test)
