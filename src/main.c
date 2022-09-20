@@ -12,6 +12,10 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 
+/* The true fundamental circle constant.
+ * See tauday.com/tau-manifesto for more. */
+#define TAU 6.28318530717f
+
 bool g_debug;
 
 int max(int a, int b)
@@ -324,6 +328,7 @@ enum obj_type_t
 	OBJ_UNIT_WALKER,
 	OBJ_UNIT_SHROOM,
 	OBJ_UNIT_DASH,
+	OBJ_UNIT_LEGS,
 	/* Shoots blue shots but not on an adjacent tile. */
 	OBJ_TOWER_YELLOW,
 	/* Shoots red shots. */
@@ -413,6 +418,7 @@ void draw_obj(obj_t const* obj, sc_t sc, int side)
 		case OBJ_UNIT_BASIC:       sprite = SPRITE_UNIT_BASIC;       break;
 		case OBJ_UNIT_SHROOM:      sprite = SPRITE_UNIT_SHROOM;      break;
 		case OBJ_UNIT_DASH:        sprite = SPRITE_UNIT_DASH;        break;
+		case OBJ_UNIT_LEGS:        sprite = SPRITE_UNIT_LEGS;        break;
 		case OBJ_TOWER_YELLOW:     sprite = SPRITE_TOWER_YELLOW;     break;
 		case OBJ_TOWER_BLUE:       sprite = SPRITE_TOWER_BLUE;       break;
 		case OBJ_MACHINE_MULTIACT: sprite = SPRITE_MACHINE_MULTIACT; break;
@@ -884,6 +890,7 @@ struct motion_t
 	int t_max;
 	tc_t src, dst;
 	obj_t obj;
+	bool arc; /* The motion is a jumping arc, not a straight line. */
 };
 typedef struct motion_t motion_t;
 
@@ -1066,6 +1073,10 @@ void draw_map(void)
 		sc_t sc = {
 			x * (float)g_tile_side_pixels + (float)g_tc_sc_offset.x,
 			y * (float)g_tile_side_pixels + (float)g_tc_sc_offset.y};
+		if (g_motion.arc)
+		{
+			sc.y -= 1.5f * (float)g_tile_side_pixels * sinf(r * TAU / 2);
+		}
 		draw_obj(&m->obj, sc, g_tile_side_pixels);
 	}
 }
@@ -1085,7 +1096,8 @@ void map_center_generate(void)
 		OBJ_UNIT_WALKER,
 		OBJ_UNIT_BASIC,
 		OBJ_UNIT_SHROOM,
-		OBJ_UNIT_DASH};
+		OBJ_UNIT_DASH,
+		OBJ_UNIT_LEGS};
 	int unit_type_count = sizeof unit_types / sizeof (obj_type_t);
 	while (unit_type_count > 3)
 	{
@@ -1358,6 +1370,7 @@ bool obj_type_is_unit(obj_type_t type)
 		case OBJ_UNIT_BASIC:
 		case OBJ_UNIT_SHROOM:
 		case OBJ_UNIT_DASH:
+		case OBJ_UNIT_LEGS:
 			return true;
 		default:
 			return false;
@@ -1432,17 +1445,59 @@ void update_selected_unit_options(tc_t unit_tc)
 		}
 	}
 
+	/* Hande the jumping for the legs unit. */
+	if (unit_tile->obj.type == OBJ_UNIT_LEGS)
+	{
+		struct dir_t
+		{
+			int dx, dy;
+		};
+		typedef struct dir_t dir_t;
+		dir_t dirs[4] = {
+			{0, -1},
+			{1, 0},
+			{0, 1},
+			{-1, 0}};
+		for (int i = 0; i < 4; i++)
+		{
+			tc_t tc = unit_tc;
+			tc.x += dirs[i].dx;
+			tc.y += dirs[i].dy;
+			if (map_tile(tc)->obj.type != OBJ_NONE)
+			{
+				while (tc_in_map(tc) && map_tile(tc)->obj.type != OBJ_NONE)
+				{
+					tc.x += dirs[i].dx;
+					tc.y += dirs[i].dy;
+				}
+				if (tc_in_map(tc))
+				{
+					tile_t* tile = map_tile(tc);
+					tile->options[OPTION_WALK] = true;
+					tile->option_move_plan = move_plan_create(unit_tc);
+					move_plan_add_beginning(&tile->option_move_plan,
+						(step_t){.move = {
+							.type = STEP_MOVE_JUMP,
+							.src = unit_tc,
+							.dst = tc}});
+				}
+			}
+		}
+	}
+
 	int walk_dist = 
 		unit_tile->obj.type == OBJ_UNIT_WALKER ? 4 :
 		unit_tile->obj.type == OBJ_UNIT_BASIC ? 3 :
 		unit_tile->obj.type == OBJ_UNIT_SHROOM ? 2 :
-		unit_tile->obj.type == OBJ_UNIT_DASH ? 0 : /* Handled above. */
+		unit_tile->obj.type == OBJ_UNIT_DASH ? 0 : /* Dash handled above. */
+		unit_tile->obj.type == OBJ_UNIT_LEGS ? 2 :
 		(assert(false), 0);
 	int tower_dist =
 		unit_tile->obj.type == OBJ_UNIT_WALKER ? 1 :
 		unit_tile->obj.type == OBJ_UNIT_BASIC ? 2 :
 		unit_tile->obj.type == OBJ_UNIT_SHROOM ? 3 :
 		unit_tile->obj.type == OBJ_UNIT_DASH ? 1 :
+		unit_tile->obj.type == OBJ_UNIT_LEGS ? 2 :
 		(assert(false), 0);
 	int const radius = max(walk_dist, tower_dist);
 	for (tc_iter_rect_t it = tc_iter_rect_init(tc_radius_to_rect(unit_tc, radius));
@@ -1462,7 +1517,7 @@ void update_selected_unit_options(tc_t unit_tc)
 				map_tile(it.tc)->obj.type == OBJ_NONE);
 		tile_t* tile = map_tile(it.tc);
 		path_internal_t path = path_internal(unit_tc, it.tc, walk_dist);
-		if (path.exists)
+		if (path.exists && !tile->options[OPTION_WALK])
 		{
 			tile->options[OPTION_WALK] = true;
 			tile->option_move_plan = path.plan;
@@ -2444,6 +2499,11 @@ void game_perform(void)
 			else
 			{
 				src_tile->obj = (obj_t){0};
+			}
+			if (step->type == STEP_MOVE_JUMP)
+			{
+				g_motion.arc = true;
+				g_motion.t_max = 14;
 			}
 		}
 		else

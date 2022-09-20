@@ -30,6 +30,7 @@ static sprite_ref_t s_sprite_rect_table[] = {
 	[SPRITE_UNIT_WALKER] =      {1, R16( 5, 1, 1, 1)},
 	[SPRITE_UNIT_SHROOM] =      {1, R16( 6, 1, 1, 1)},
 	[SPRITE_UNIT_DASH] =        {1, R16( 8, 1, 1, 1)},
+	[SPRITE_UNIT_LEGS] =        {1, R16( 9, 1, 1, 1)},
 	[SPRITE_CAN_STILL_ACT] =    {1, {1*16, 3*16, 6, 6}},
 	[SPRITE_WALK] =             {1, R16( 2, 3, 1, 1)},
 	[SPRITE_TOWER_YELLOW] =     {1, R16( 4, 3, 1, 1)},
