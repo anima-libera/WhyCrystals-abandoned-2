@@ -19,6 +19,7 @@ struct rgb_t
 };
 typedef struct rgb_t rgb_t;
 
+rgb_t g_color_bg_shadow = {5, 30, 25};
 rgb_t g_color_bg = {10, 40, 35};
 rgb_t g_color_bg_bright = {20, 80, 70};
 rgb_t g_color_white = {180, 220, 200};
@@ -137,8 +138,9 @@ bool obj_da_contains_type(obj_da_t const* da, obj_type_t type)
 
 struct tile_t
 {
-	bool is_path;
 	obj_da_t obj_da;
+	bool is_path;
+	int vision;
 };
 typedef struct tile_t tile_t;
 
@@ -160,6 +162,11 @@ struct tc_t
 	int x, y;
 };
 typedef struct tc_t tc_t;
+
+bool tc_eq(tc_t a, tc_t b)
+{
+	return a.x == b.x && a.y == b.y;
+}
 
 bool tc_in_rect(tc_t tc, tc_rect_t rect)
 {
@@ -206,6 +213,144 @@ tc_t tc_add_move(tc_t tc, tm_t move)
 	return (tc_t){.x = tc.x + move.x, .y = tc.y + move.y};
 }
 
+struct bresenham_it_t
+{
+	tc_t a, b, head;
+	int dx, dy, i, d;
+	bool just_initialized;
+};
+typedef struct bresenham_it_t bresenham_it_t;
+
+bresenham_it_t line_bresenham_init(tc_t a, tc_t b)
+{
+	bresenham_it_t it;
+	it.a = a;
+	it.b = b;
+	#define LINE_BRESENHAM_INIT(x_, y_) \
+		it.d##x_ = abs(it.b.x_ - it.a.x_); \
+		it.d##y_ = it.b.y_ - it.a.y_; \
+		it.i = 1; \
+		if (it.d##y_ < 0) \
+		{ \
+			it.i *= -1; \
+			it.d##y_ *= -1; \
+		} \
+		it.d = (2 * it.d##y_) - it.d##x_; \
+		it.head.x = it.a.x; \
+		it.head.y = it.a.y;
+	if (abs(b.y - a.y) < abs(b.x - a.x))
+	{
+		LINE_BRESENHAM_INIT(x, y)
+	}
+	else
+	{
+		LINE_BRESENHAM_INIT(y, x)
+	}
+	#undef LINE_BRESENHAM_INIT
+	it.just_initialized = true;
+	return it;
+}
+
+bool line_bresenham_iter(bresenham_it_t* it)
+{
+	if (it->just_initialized)
+	{
+		it->just_initialized = false;
+		return true;
+	}
+	#define LINE_BRESENHAM_ITER(x_, y_) \
+		if (it->head.x_ == it->b.x_) \
+		{ \
+			return false; \
+		} \
+		it->head.x_ += it->a.x_ < it->b.x_ ? 1 : -1; \
+		if (it->d > 0) \
+		{ \
+			it->head.y_ += it->i; \
+			it->d += (2 * (it->d##y_ - it->d##x_)); \
+		} \
+		else \
+		{ \
+			it->d += 2 * it->d##y_; \
+		} \
+		return true;
+	if (abs(it->b.y - it->a.y) < abs(it->b.x - it->a.x))
+	{
+		LINE_BRESENHAM_ITER(x, y)
+	}
+	else
+	{
+		LINE_BRESENHAM_ITER(y, x)
+	}
+	#undef LINE_BRESENHAM_ITER
+}
+
+void recompute_vision(void)
+{
+	for (int y = 0; y < g_mg_rect.h; y++)
+	for (int x = 0; x < g_mg_rect.w; x++)
+	{
+		tc_t tc = {x, y};
+		tile_t* tile = mg_tile(tc);
+		tile->vision = 0;
+	}
+
+	tc_t src_tc = g_player_tc;
+
+	for (int y = 0; y < g_mg_rect.h; y++)
+	for (int x = 0; x < g_mg_rect.w; x++)
+	{
+		tc_t tc = {x, y};
+		tile_t* tile = mg_tile(tc);
+		if (tile->vision != 0)
+		{
+			continue;
+		}
+		
+		int vision = 5;
+		bresenham_it_t it = line_bresenham_init(src_tc, tc);
+		while (line_bresenham_iter(&it))
+		{
+			tile_t* tile = mg_tile(it.head);
+			tile->vision = max(tile->vision, vision);
+			if (tc_eq(it.head, src_tc))
+			{
+				continue;
+			}
+			for (int i = 0; i < tile->obj_da.len; i++)
+			{
+				if (tile->obj_da.arr[i] == NULL)
+				{
+					continue;
+				}
+				switch (tile->obj_da.arr[i]->type)
+				{
+					case OBJ_GRASS:
+						vision -= 3;
+					break;
+					case OBJ_TREE:
+						vision -= 8;
+					break;
+					case OBJ_ROCK:
+						vision -= 100;
+					break;
+					case OBJ_CRYSTAL:
+						vision -= 4;
+					break;
+					default:
+						;
+					break;
+				}
+			}
+			if (vision < 0)
+			{
+				vision = 0;
+			}
+		}
+	}
+
+}
+
 void player_try_move(tm_t move)
 {
 	tile_t* src_player_tile = mg_tile(g_player_tc);
@@ -227,6 +372,7 @@ void player_try_move(tm_t move)
 	obj_da_remove(&src_player_tile->obj_da, player_obj);
 	obj_da_add(&dst_player_tile->obj_da, player_obj);
 	g_player_tc = dst_player_tc;
+	recompute_vision();
 }
 
 int main(void)
@@ -391,6 +537,8 @@ int main(void)
 	g_player_tc = (tc_t){g_mg_rect.w / 2, g_mg_rect.h / 2};
 	obj_da_add(&mg_tile(g_player_tc)->obj_da, obj_alloc(OBJ_PLAYER));
 
+	recompute_vision();
+
 	bool running = true;
 	while (running)
 	{
@@ -466,6 +614,27 @@ int main(void)
 			if (tile->is_path)
 			{
 				bg_color = g_color_bg_bright;
+			}
+
+			if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT])
+			{
+				if (tile->vision > 0)
+				{
+					bg_color = (rgb_t){
+						min(255, tile->vision * 30),
+						max(0, min(255, tile->vision * 30 - 255)),
+						0};
+				}
+				else
+				{
+					bg_color = (rgb_t){0, 0, 0};
+				}
+			}
+
+			if (tile->vision <= 0)
+			{
+				text = " ";
+				bg_color = g_color_bg_shadow;
 			}
 
 			SDL_SetRenderDrawColor(g_renderer, bg_color.r, bg_color.g, bg_color.b, 255);
