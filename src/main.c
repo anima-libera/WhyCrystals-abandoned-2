@@ -18,10 +18,11 @@ struct rgb_t
 };
 typedef struct rgb_t rgb_t;
 
-rgb_t cool_bg = {10, 40, 35};
-rgb_t cool_h = {20, 80, 70};
-rgb_t cool_white = {180, 220, 200};
-rgb_t cool_yellow = {230, 240, 40};
+rgb_t g_color_bg = {10, 40, 35};
+rgb_t g_color_bg_bright = {20, 80, 70};
+rgb_t g_color_white = {180, 220, 200};
+rgb_t g_color_yellow = {230, 240, 40};
+rgb_t g_color_red = {230, 40, 35};
 
 void draw_text(char const* text, rgb_t color, SDL_Rect rect)
 {
@@ -54,6 +55,7 @@ enum obj_type_t
 {
 	OBJ_NONE,
 	OBJ_PLAYER,
+	OBJ_CRYSTAL,
 	OBJ_ROCK,
 };
 typedef enum obj_type_t obj_type_t;
@@ -71,11 +73,17 @@ struct tile_t
 };
 typedef struct tile_t tile_t;
 
-int tile_w = 30, tile_h = 30;
+int g_tile_w = 30, g_tile_h = 30;
+
+struct tc_rect_t
+{
+	int x, y, w, h;
+};
+typedef struct tc_rect_t tc_rect_t;
 
 /* Map grid. */
-tile_t* mg = NULL;
-int mg_w = -1, mg_h = -1;
+tile_t* g_mg = NULL;
+tc_rect_t g_mg_rect = {0, 0, -1, -1};
 
 /* Tile coords. */
 struct tc_t
@@ -84,16 +92,18 @@ struct tc_t
 };
 typedef struct tc_t tc_t;
 
-bool tc_in_bounds(tc_t tc)
+bool tc_in_rect(tc_t tc, tc_rect_t rect)
 {
-	return 0 <= tc.x && tc.x < mg_w && 0 <= tc.y && tc.y < mg_h;
+	return
+		rect.x <= tc.x && tc.x < rect.x + rect.w &&
+		rect.y <= tc.y && tc.y < rect.y + rect.h;
 }
 
 tile_t* mg_tile(tc_t tc)
 {
-	if (tc_in_bounds(tc))
+	if (tc_in_rect(tc, g_mg_rect))
 	{
-		return &mg[tc.y * mg_w + tc.x];
+		return &g_mg[tc.y * g_mg_rect.w + tc.x];
 	}
 	else
 	{
@@ -101,42 +111,53 @@ tile_t* mg_tile(tc_t tc)
 	}
 }
 
-tc_t player_tc;
+tc_t g_crystal_tc;
+tc_t g_player_tc;
 
-/* Represents a move on the grid rather than a tile. */
-typedef tc_t tc_move_t;
-#define TC_MOVE_UP    (tc_move_t){.x =  0, .y = -1}
-#define TC_MOVE_RIGHT (tc_move_t){.x = +1, .y =  0}
-#define TC_MOVE_DOWN  (tc_move_t){.x =  0, .y = +1}
-#define TC_MOVE_LEFT  (tc_move_t){.x = -1, .y =  0}
+/* Tile move. Represents a move on the grid rather than a tile. */
+typedef tc_t tm_t;
+#define TM_UP    (tm_t){.x =  0, .y = -1}
+#define TM_RIGHT (tm_t){.x = +1, .y =  0}
+#define TM_DOWN  (tm_t){.x =  0, .y = +1}
+#define TM_LEFT  (tm_t){.x = -1, .y =  0}
+#define TM_ONE_ALL (tm_t[]){TM_UP, TM_RIGHT, TM_DOWN, TM_LEFT}
 
-tc_move_t rand_one_tile_move(void)
+tm_t rand_tm_one(void)
 {
-	return (tc_move_t[]){TC_MOVE_UP, TC_MOVE_RIGHT, TC_MOVE_DOWN, TC_MOVE_LEFT}[rand() % 4];
+	return TM_ONE_ALL[rand() % 4];
 }
 
-tc_t tc_add_move(tc_t tc, tc_move_t move)
+bool tm_one_orthogonal(tm_t a, tm_t b)
+{
+	return !((a.x != 0 && b.x != 0) || (a.y != 0 && b.y != 0));
+}
+
+tc_t tc_add_move(tc_t tc, tm_t move)
 {
 	return (tc_t){.x = tc.x + move.x, .y = tc.y + move.y};
 }
 
-void player_try_move(tc_move_t move)
+void player_try_move(tm_t move)
 {
-	tile_t* src_player_tile = mg_tile(player_tc);
-	tc_t dst_player_tc = tc_add_move(player_tc, move);
+	tile_t* src_player_tile = mg_tile(g_player_tc);
+	tc_t dst_player_tc = tc_add_move(g_player_tc, move);
 	tile_t* dst_player_tile = mg_tile(dst_player_tc);
 	if (dst_player_tile == NULL)
 	{
 		return;
 	}
 
-	if (dst_player_tile->obj.type == OBJ_ROCK)
+	switch (dst_player_tile->obj.type)
 	{
-		return;
+		case OBJ_ROCK:
+		case OBJ_CRYSTAL:
+			return;
+		default:
+			break;
 	}
 
 	dst_player_tile->obj = src_player_tile->obj;
-	player_tc = dst_player_tc;
+	g_player_tc = dst_player_tc;
 	src_player_tile->obj = (obj_t){.type = OBJ_NONE};
 }
 
@@ -169,12 +190,12 @@ int main(void)
 	g_font = TTF_OpenFontRW(rwops_font, 0, 20);
 	assert(g_font != NULL);
 
-	mg_w = g_window_w / tile_w;
-	mg_h = g_window_h / tile_h;
-	mg = malloc(mg_w * mg_h * sizeof(tile_t));
+	g_mg_rect.w = g_window_w / g_tile_w;
+	g_mg_rect.h = g_window_h / g_tile_h;
+	g_mg = malloc(g_mg_rect.w * g_mg_rect.h * sizeof(tile_t));
 
-	for (int y = 0; y < mg_h; y++)
-	for (int x = 0; x < mg_w; x++)
+	for (int y = 0; y < g_mg_rect.h; y++)
+	for (int x = 0; x < g_mg_rect.w; x++)
 	{
 		tc_t tc = {x, y};
 		tile_t* tile = mg_tile(tc);
@@ -182,17 +203,106 @@ int main(void)
 		tile->obj.type = OBJ_NONE;
 	}
 
+	g_crystal_tc = (tc_t){
+		.x = g_mg_rect.x + g_mg_rect.w / 4 + rand() % (g_mg_rect.w / 9),
+		.y = g_mg_rect.y + g_mg_rect.h / 3 + rand() % (g_mg_rect.h / 3)};
+	mg_tile(g_crystal_tc)->obj = (obj_t){.type = OBJ_CRYSTAL};
+
+	/* Generate the path. */
+	while (true)
 	{
-		tc_t tc = {mg_w / 2, mg_h / 2};
-		while (tc_in_bounds(tc))
+		/* Generate a path that may or may not be validated. */
+		int margin = 3;
+		tc_rect_t path_rect = {
+			g_mg_rect.x + margin, g_mg_rect.y + margin,
+			g_mg_rect.w - margin, g_mg_rect.h - 2 * margin};
+		tc_t tc = g_crystal_tc;
+		tm_t direction = rand_tm_one();
+		int same_direction_steps = 0;
+		while (tc_in_rect(tc, path_rect))
 		{
-			mg_tile(tc)->is_path = true;
-			tc = tc_add_move(tc, rand_one_tile_move());
+			tile_t* tile = mg_tile(tc);
+			tile->is_path = true;
+			if (tc.x == g_mg_rect.w-1)
+			{
+				break;
+			}
+			tc = tc_add_move(tc, direction);
+			same_direction_steps++;
+
+			if (same_direction_steps >= 1 && rand() % (same_direction_steps == 1 ? 6 : 2) == 0)
+			{
+				/* Change the direction. */
+				tm_t new_direction = rand_tm_one();
+				while (!tm_one_orthogonal(direction, new_direction))
+				{
+					new_direction = rand_tm_one();
+				}
+				direction = new_direction;
+				same_direction_steps = 0;
+			}
+		}
+
+		/* Validate the generated path, or not. */
+		for (int y = 0; y < g_mg_rect.h; y++)
+		for (int x = 0; x < g_mg_rect.w; x++)
+		{
+			tc_t tc = {x, y};
+			tile_t* tile = mg_tile(tc);
+			if (tile->is_path)
+			{
+				/* Making sure that the path only has straight lines and turns
+				 * and does not contains T-shaped or plus-shaped parts. */
+				int neighbor_path_count = 0;
+				for (int i = 0; i < 4; i++)
+				{
+					tc_t neighbor_tc = tc_add_move(tc, TM_ONE_ALL[i]);
+					tile_t* neighbor_tile = mg_tile(neighbor_tc);
+					if (neighbor_tile != NULL && neighbor_tile->is_path)
+					{
+						neighbor_path_count++;
+					}
+				}
+				if (neighbor_path_count >= 3)
+				{
+					goto path_invalid;
+				}				
+			}
+		}
+		/* Making sure that the path touches the right part of the map. */
+		bool path_touches_right_edge = false;
+		for (int y = 0; y < g_mg_rect.h; y++)
+		{
+			tc_t tc = {g_mg_rect.w-1, y};
+			tile_t* tile = mg_tile(tc);
+			if (tile->is_path)
+			{
+				path_touches_right_edge = true;
+				break;
+			}
+		}
+		if (!path_touches_right_edge)
+		{
+			goto path_invalid;
+		}
+
+		/* The generated path was validated. */
+		break;
+
+		path_invalid:
+		/* The generated path was not validated.
+		 * It is erased before retrying. */
+		for (int y = 0; y < g_mg_rect.h; y++)
+		for (int x = 0; x < g_mg_rect.w; x++)
+		{
+			tc_t tc = {x, y};
+			tile_t* tile = mg_tile(tc);
+			tile->is_path = false;
 		}
 	}
 
-	for (int y = 0; y < mg_h; y++)
-	for (int x = 0; x < mg_w; x++)
+	for (int y = 0; y < g_mg_rect.h; y++)
+	for (int x = 0; x < g_mg_rect.w; x++)
 	{
 		tc_t tc = {x, y};
 		tile_t* tile = mg_tile(tc);
@@ -203,8 +313,8 @@ int main(void)
 		}
 	}
 
-	player_tc = (tc_t){mg_w / 2, mg_h / 2};
-	mg_tile(player_tc)->obj = (obj_t){.type = OBJ_PLAYER};
+	g_player_tc = (tc_t){g_mg_rect.w / 2, g_mg_rect.h / 2};
+	mg_tile(g_player_tc)->obj = (obj_t){.type = OBJ_PLAYER};
 
 	bool running = true;
 	while (running)
@@ -224,33 +334,33 @@ int main(void)
 							running = false;
 						break;
 						case SDLK_UP:
-							player_try_move(TC_MOVE_UP);
+							player_try_move(TM_UP);
 						break;
 						case SDLK_RIGHT:
-							player_try_move(TC_MOVE_RIGHT);
+							player_try_move(TM_RIGHT);
 						break;
 						case SDLK_DOWN:
-							player_try_move(TC_MOVE_DOWN);
+							player_try_move(TM_DOWN);
 						break;
 						case SDLK_LEFT:
-							player_try_move(TC_MOVE_LEFT);
+							player_try_move(TM_LEFT);
 						break;
 					}
 				break;
 			}
 		}
 
-		SDL_SetRenderDrawColor(g_renderer, cool_bg.r, cool_bg.g, cool_bg.b, 255);
+		SDL_SetRenderDrawColor(g_renderer, g_color_bg.r, g_color_bg.g, g_color_bg.b, 255);
 		SDL_RenderClear(g_renderer);
 
-		for (int y = 0; y < mg_h; y++)
-		for (int x = 0; x < mg_w; x++)
+		for (int y = 0; y < g_mg_rect.h; y++)
+		for (int x = 0; x < g_mg_rect.w; x++)
 		{
-			SDL_Rect rect = {x * tile_w, y * tile_h, tile_w, tile_h};
-			tile_t const* tile = &mg[y * mg_w + x];
+			SDL_Rect rect = {x * g_tile_w, y * g_tile_h, g_tile_w, g_tile_h};
+			tile_t const* tile = &g_mg[y * g_mg_rect.w + x];
 			char* text = " ";
-			rgb_t text_color = cool_white;
-			rgb_t bg_color = cool_bg;
+			rgb_t text_color = g_color_white;
+			rgb_t bg_color = g_color_bg;
 			switch (tile->obj.type)
 			{
 				case OBJ_NONE:
@@ -259,14 +369,18 @@ int main(void)
 				case OBJ_ROCK:
 					text = "#";
 				break;
+				case OBJ_CRYSTAL:
+					text = "A";
+					text_color = g_color_red;
+				break;
 				case OBJ_PLAYER:
 					text = "@";
-					text_color = cool_yellow;
+					text_color = g_color_yellow;
 				break;
 			}
 			if (tile->is_path)
 			{
-				bg_color = cool_h;
+				bg_color = g_color_bg_bright;
 			}
 			SDL_SetRenderDrawColor(g_renderer, bg_color.r, bg_color.g, bg_color.b, 255);
 			SDL_RenderFillRect(g_renderer, &rect);
