@@ -1,9 +1,15 @@
 
-#include "embedded.h"
-#include <time.h>
+#include "utils.h"
+#include "window.h"
+#include "text.h"
+#include "sprites.h"
 #include <assert.h>
 #include <stdbool.h>
+#include <time.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 
 int main(void)
@@ -15,29 +21,27 @@ int main(void)
 		assert(false);
 	}
 
-	int g_window_w = 1200, g_window_h = 600;
-
-	SDL_Window* g_window = SDL_CreateWindow("Why Crystals ?",
-		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, g_window_w, g_window_h, 0);
+	g_window = SDL_CreateWindow("Why Crystals ?",
+		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, g_window_w, g_window_h,
+		SDL_WINDOW_RESIZABLE);
 	assert(g_window != NULL);
 
-	SDL_Renderer* g_renderer = SDL_CreateRenderer(g_window, -1,
+	g_renderer = SDL_CreateRenderer(g_window, -1,
 		SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE);
 	assert(g_renderer != NULL);
+
+	if (IMG_Init(IMG_INIT_PNG) != IMG_INIT_PNG)
+	{
+		assert(false);
+	}
 
 	if (TTF_Init() < 0)
 	{
 		assert(false);
 	}
 
-	TTF_Font* g_font;
-
-	SDL_RWops* rwops_font = SDL_RWFromConstMem(
-		g_asset_font,
-		g_asset_font_size);
-	assert(rwops_font != NULL);
-	g_font = TTF_OpenFontRW(rwops_font, 0, 20);
-	assert(g_font != NULL);
+	load_font();
+	load_sprite_sheet();
 
 	bool running = true;
 	while (running)
@@ -68,9 +72,9 @@ int main(void)
 	}
 
 	TTF_Quit();
+	IMG_Quit();
 	SDL_DestroyRenderer(g_renderer);
 	SDL_DestroyWindow(g_window);
 	SDL_Quit();
-
 	return 0;
 }
