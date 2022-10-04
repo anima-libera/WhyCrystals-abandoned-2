@@ -1,5 +1,6 @@
 
 #include "embedded.h"
+#include "utils.h"
 #include <time.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -23,6 +24,9 @@ rgb_t g_color_bg_bright = {20, 80, 70};
 rgb_t g_color_white = {180, 220, 200};
 rgb_t g_color_yellow = {230, 240, 40};
 rgb_t g_color_red = {230, 40, 35};
+rgb_t g_color_green = {10, 240, 45};
+rgb_t g_color_light_green = {40, 240, 90};
+rgb_t g_color_dark_green = {10, 160, 40};
 
 void draw_text(char const* text, rgb_t color, SDL_Rect rect)
 {
@@ -57,6 +61,8 @@ enum obj_type_t
 	OBJ_PLAYER,
 	OBJ_CRYSTAL,
 	OBJ_ROCK,
+	OBJ_GRASS,
+	OBJ_TREE,
 };
 typedef enum obj_type_t obj_type_t;
 
@@ -66,10 +72,73 @@ struct obj_t
 };
 typedef struct obj_t obj_t;
 
+obj_t* obj_alloc(obj_type_t type)
+{
+	obj_t* obj = malloc(sizeof(obj_t));
+	*obj = (obj_t){.type = type};
+	return obj;
+}
+
+void obj_dealloc(obj_t* obj)
+{
+	free(obj);
+}
+
+struct obj_da_t
+{
+	obj_t** arr;
+	int len, cap;
+};
+typedef struct obj_da_t obj_da_t;
+
+void obj_da_add(obj_da_t* da, obj_t* obj)
+{
+	/* Try inserting in a free spot. */
+	for (int i = 0; i < da->len; i++)
+	{
+		if (da->arr[i] == NULL)
+		{
+			da->arr[i] = obj;
+			return;
+		}
+	}
+	/* No free spot, extend the dynamic array. */
+	DA_LENGTHEN(da->len += 1, da->cap, da->arr, obj_t*);
+	da->arr[da->len-1] = obj;
+}
+
+void obj_da_remove(obj_da_t* da, obj_t* obj)
+{
+	for (int i = 0; i < da->len; i++)
+	{
+		if (da->arr[i] == obj)
+		{
+			da->arr[i] = NULL;
+		}
+	}
+}
+
+obj_t* obj_da_find_type(obj_da_t const* da, obj_type_t type)
+{
+	for (int i = 0; i < da->len; i++)
+	{
+		if (da->arr[i] != NULL && da->arr[i]->type == type)
+		{
+			return da->arr[i];
+		}
+	}
+	return NULL;
+}
+
+bool obj_da_contains_type(obj_da_t const* da, obj_type_t type)
+{
+	return obj_da_find_type(da, type) != NULL;
+}
+
 struct tile_t
 {
 	bool is_path;
-	obj_t obj;
+	obj_da_t obj_da;
 };
 typedef struct tile_t tile_t;
 
@@ -147,18 +216,17 @@ void player_try_move(tm_t move)
 		return;
 	}
 
-	switch (dst_player_tile->obj.type)
+	if (obj_da_contains_type(&dst_player_tile->obj_da, OBJ_ROCK) ||
+		obj_da_contains_type(&dst_player_tile->obj_da, OBJ_CRYSTAL) ||
+		obj_da_contains_type(&dst_player_tile->obj_da, OBJ_TREE))
 	{
-		case OBJ_ROCK:
-		case OBJ_CRYSTAL:
-			return;
-		default:
-			break;
+		return;
 	}
 
-	dst_player_tile->obj = src_player_tile->obj;
+	obj_t* player_obj = obj_da_find_type(&src_player_tile->obj_da, OBJ_PLAYER);
+	obj_da_remove(&src_player_tile->obj_da, player_obj);
+	obj_da_add(&dst_player_tile->obj_da, player_obj);
 	g_player_tc = dst_player_tc;
-	src_player_tile->obj = (obj_t){.type = OBJ_NONE};
 }
 
 int main(void)
@@ -200,13 +268,12 @@ int main(void)
 		tc_t tc = {x, y};
 		tile_t* tile = mg_tile(tc);
 		*tile = (tile_t){0};
-		tile->obj.type = OBJ_NONE;
 	}
 
 	g_crystal_tc = (tc_t){
 		.x = g_mg_rect.x + g_mg_rect.w / 4 + rand() % (g_mg_rect.w / 9),
 		.y = g_mg_rect.y + g_mg_rect.h / 3 + rand() % (g_mg_rect.h / 3)};
-	mg_tile(g_crystal_tc)->obj = (obj_t){.type = OBJ_CRYSTAL};
+	obj_da_add(&mg_tile(g_crystal_tc)->obj_da, obj_alloc(OBJ_CRYSTAL));
 
 	/* Generate the path. */
 	while (true)
@@ -309,12 +376,20 @@ int main(void)
 		
 		if (!tile->is_path && rand() % 5 == 0)
 		{
-			tile->obj.type = OBJ_ROCK;
+			obj_da_add(&tile->obj_da, obj_alloc(OBJ_ROCK));
+		}
+		else if (!tile->is_path && rand() % 5 == 0)
+		{
+			obj_da_add(&tile->obj_da, obj_alloc(OBJ_TREE));
+		}
+		else if (!tile->is_path && rand() % 3 != 0)
+		{
+			obj_da_add(&tile->obj_da, obj_alloc(OBJ_GRASS));
 		}
 	}
 
 	g_player_tc = (tc_t){g_mg_rect.w / 2, g_mg_rect.h / 2};
-	mg_tile(g_player_tc)->obj = (obj_t){.type = OBJ_PLAYER};
+	obj_da_add(&mg_tile(g_player_tc)->obj_da, obj_alloc(OBJ_PLAYER));
 
 	bool running = true;
 	while (running)
@@ -358,30 +433,41 @@ int main(void)
 		{
 			SDL_Rect rect = {x * g_tile_w, y * g_tile_h, g_tile_w, g_tile_h};
 			tile_t const* tile = &g_mg[y * g_mg_rect.w + x];
+
 			char* text = " ";
 			rgb_t text_color = g_color_white;
 			rgb_t bg_color = g_color_bg;
-			switch (tile->obj.type)
+			if (obj_da_contains_type(&tile->obj_da, OBJ_PLAYER))
 			{
-				case OBJ_NONE:
-					;
-				break;
-				case OBJ_ROCK:
-					text = "#";
-				break;
-				case OBJ_CRYSTAL:
-					text = "A";
-					text_color = g_color_red;
-				break;
-				case OBJ_PLAYER:
-					text = "@";
-					text_color = g_color_yellow;
-				break;
+				text = "@";
+				text_color = g_color_yellow;
 			}
+			else if (obj_da_contains_type(&tile->obj_da, OBJ_CRYSTAL))
+			{
+				text = "A";
+				text_color = g_color_red;
+			}
+			else if (obj_da_contains_type(&tile->obj_da, OBJ_ROCK))
+			{
+				text = "#";
+				text_color = g_color_white;
+			}
+			else if (obj_da_contains_type(&tile->obj_da, OBJ_TREE))
+			{
+				text = "Y";
+				text_color = g_color_light_green;
+			}
+			else if (obj_da_contains_type(&tile->obj_da, OBJ_GRASS))
+			{
+				text = " v ";
+				text_color = g_color_dark_green;
+			}
+			
 			if (tile->is_path)
 			{
 				bg_color = g_color_bg_bright;
 			}
+
 			SDL_SetRenderDrawColor(g_renderer, bg_color.r, bg_color.g, bg_color.b, 255);
 			SDL_RenderFillRect(g_renderer, &rect);
 			draw_text(text, text_color, rect);
