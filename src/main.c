@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 
@@ -19,6 +20,17 @@ struct rgb_t
 };
 typedef struct rgb_t rgb_t;
 
+struct rgba_t
+{
+	uint8_t r, g, b, a;
+};
+typedef struct rgba_t rgba_t;
+
+rgba_t rgb_to_rgba(rgb_t rgb, uint8_t alpha)
+{
+	return (rgba_t){rgb.r, rgb.g, rgb.b, alpha};
+}
+
 rgb_t g_color_bg_shadow = {5, 30, 25};
 rgb_t g_color_bg = {10, 40, 35};
 rgb_t g_color_bg_bright = {20, 80, 70};
@@ -29,24 +41,86 @@ rgb_t g_color_green = {10, 240, 45};
 rgb_t g_color_light_green = {40, 240, 90};
 rgb_t g_color_dark_green = {10, 160, 40};
 
-void draw_text(char const* text, rgb_t color, SDL_Rect rect)
+SDL_Texture* text_to_texture(char const* text, rgba_t color)
 {
-	/* Make a texture out of the text. */
-	SDL_Color sdl_color = {color.r, color.g, color.b, 255};
+	SDL_Color sdl_color = {color.r, color.g, color.b, color.a};
 	SDL_Surface* surface = TTF_RenderText_Solid(g_font, text, sdl_color);
 	assert(surface != NULL);
 	SDL_Texture* texture = SDL_CreateTextureFromSurface(g_renderer, surface);
 	assert(texture != NULL);
 	SDL_FreeSurface(surface);
+	return texture;
+}
 
+void draw_text_stetch(char const* text, rgb_t color, SDL_Rect rect)
+{
+	SDL_Texture* texture = text_to_texture(text, rgb_to_rgba(color, 255));
 	SDL_RenderCopy(g_renderer, texture, NULL, &rect);
 	SDL_DestroyTexture(texture);
 }
 
-void draw_char(char c, rgb_t color, SDL_Rect rect)
+struct log_entry_t
 {
-	char text[] = {c, '\0'};
-	draw_text(text, color, rect);
+	char* text;
+	int time;
+};
+typedef struct log_entry_t log_entry_t;
+
+int g_log_len = 0, g_log_cap = 0;
+log_entry_t* g_log_da = NULL;
+
+void log_text(char* format, ...)
+{
+	va_list va;
+	va_start(va, format);
+	int text_len = vsnprintf(NULL, 0, format, va);
+	assert(text_len >= 0);
+	char* text = malloc(text_len + 1);
+	vsnprintf(text, text_len + 1, format, va);
+	va_end(va);
+
+	DA_LENGTHEN(g_log_len += 1, g_log_cap, g_log_da, log_entry_t);
+	for (int i = g_log_len-1; i > 0; i--)
+	{
+		g_log_da[i] = g_log_da[i-1];
+	}
+	g_log_da[0] = (log_entry_t){
+		.text = text,
+		.time = 200};
+}
+
+void draw_log(void)
+{
+	int y = g_window_h - 30;
+	for (int i = 0; i < g_log_len; i++)
+	{
+		int alpha = min(255, g_log_da[i].time * 6);
+
+		SDL_Texture* texture = text_to_texture(g_log_da[i].text,
+			rgb_to_rgba(g_color_white, 255));
+		SDL_SetTextureAlphaMod(texture, alpha);
+		SDL_Rect rect = {.x = 10, .y = y};
+		SDL_QueryTexture(texture, NULL, NULL, &rect.w, &rect.h);
+
+		SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
+		SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, alpha / 3);
+		SDL_RenderFillRect(g_renderer, &rect);
+		SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+		SDL_RenderCopy(g_renderer, texture, NULL, &rect);
+		SDL_DestroyTexture(texture);
+		SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_NONE);
+
+		g_log_da[i].time--;
+
+		y -= rect.h;
+	}
+
+	if (g_log_len > 0 && g_log_da[g_log_len-1].time <= 0)
+	{
+		free(g_log_da[g_log_len-1].text);
+		g_log_da[g_log_len-1] = (log_entry_t){0};
+		g_log_len--;
+	}
 }
 
 enum obj_type_t
@@ -385,6 +459,11 @@ void player_try_move(tm_t move)
 					obj_da_remove(&dst_player_tile->obj_da, obj);
 					obj_dealloc(obj);
 					recompute_vision();
+					log_text("Killed a bush.");
+				}
+				else
+				{
+					log_text("Damaged a bush.");
 				}
 				return;
 			default:
@@ -744,8 +823,10 @@ int main(void)
 
 			rect.y -= 5 + text_stretch;
 			rect.h += 10 + text_stretch + text_stretch / 3;
-			draw_text(text, text_color, rect);
+			draw_text_stetch(text, text_color, rect);
 		}
+
+		draw_log();
 
 		SDL_RenderPresent(g_renderer);
 	}
