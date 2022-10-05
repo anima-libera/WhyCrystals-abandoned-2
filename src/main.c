@@ -66,6 +66,7 @@ struct obj_t
 {
 	obj_type_t type;
 	int life;
+	int damaged_effect_time;
 };
 typedef struct obj_t obj_t;
 
@@ -204,7 +205,7 @@ bool tm_one_orthogonal(tm_t a, tm_t b)
 	return !((a.x != 0 && b.x != 0) || (a.y != 0 && b.y != 0));
 }
 
-tc_t tc_add_move(tc_t tc, tm_t move)
+tc_t tc_add_tm(tc_t tc, tm_t move)
 {
 	return (tc_t){.x = tc.x + move.x, .y = tc.y + move.y};
 }
@@ -356,7 +357,7 @@ void recompute_vision(void)
 void player_try_move(tm_t move)
 {
 	tile_t* src_player_tile = mg_tile(g_player_tc);
-	tc_t dst_player_tc = tc_add_move(g_player_tc, move);
+	tc_t dst_player_tc = tc_add_tm(g_player_tc, move);
 	tile_t* dst_player_tile = mg_tile(dst_player_tc);
 	if (dst_player_tile == NULL)
 	{
@@ -378,6 +379,7 @@ void player_try_move(tm_t move)
 				return;
 			case OBJ_BUSH:
 				obj->life--;
+				obj->damaged_effect_time = 2;
 				if (obj->life <= 0)
 				{
 					obj_da_remove(&dst_player_tile->obj_da, obj);
@@ -463,7 +465,7 @@ int main(void)
 			{
 				break;
 			}
-			tc = tc_add_move(tc, direction);
+			tc = tc_add_tm(tc, direction);
 			same_direction_steps++;
 
 			if (same_direction_steps >= 1 && rand() % (same_direction_steps == 1 ? 6 : 2) == 0)
@@ -492,7 +494,7 @@ int main(void)
 				int neighbor_path_count = 0;
 				for (int i = 0; i < 4; i++)
 				{
-					tc_t neighbor_tc = tc_add_move(tc, TM_ONE_ALL[i]);
+					tc_t neighbor_tc = tc_add_tm(tc, TM_ONE_ALL[i]);
 					tile_t* neighbor_tile = mg_tile(neighbor_tc);
 					if (neighbor_tile != NULL && neighbor_tile->is_path)
 					{
@@ -542,32 +544,48 @@ int main(void)
 	{
 		tc_t tc = {x, y};
 		tile_t* tile = mg_tile(tc);
+
+		if (tile->is_path)
+		{
+			continue;
+		}
+
+		bool neighbor_to_path = false;
+		for (int i = 0; i < 4; i++)
+		{
+			tile_t* neighbor_tile = mg_tile(tc_add_tm(tc, TM_ONE_ALL[i]));
+			if (neighbor_tile != NULL && neighbor_tile->is_path)
+			{
+				neighbor_to_path = true;
+				break;
+			}
+		}
 		
-		if (!tile->is_path && rand() % 5 == 0)
+		if (rand() % 5 == 0)
 		{
 			obj_t* obj = obj_alloc(OBJ_ROCK);
 			obj->life = 1000;
 			obj_da_add(&tile->obj_da, obj);
 		}
-		else if (!tile->is_path && rand() % 5 == 0)
+		else if (rand() % (neighbor_to_path ? 2 : 5) == 0)
 		{
 			obj_t* obj = obj_alloc(OBJ_TREE);
 			obj->life = 100;
 			obj_da_add(&tile->obj_da, obj);
 		}
-		else if (!tile->is_path && rand() % 3 != 0)
+		else if (rand() % 3 != 0)
 		{
 			obj_t* obj = obj_alloc(OBJ_GRASS);
 			obj->life = 4;
 			obj_da_add(&tile->obj_da, obj);
 		}
-		else if (!tile->is_path && rand() % 3 != 0)
+		else if (rand() % 3 != 0)
 		{
 			obj_t* obj = obj_alloc(OBJ_MOSS);
 			obj->life = 2;
 			obj_da_add(&tile->obj_da, obj);
 		}
-		else if (!tile->is_path && rand() % 3 != 0)
+		else if (rand() % 3 != 0)
 		{
 			obj_t* obj = obj_alloc(OBJ_BUSH);
 			obj->life = 8;
@@ -583,6 +601,8 @@ int main(void)
 	obj_da_add(&mg_tile(g_player_tc)->obj_da, obj_alloc(OBJ_PLAYER));
 
 	recompute_vision();
+	
+	bool center_player = false;
 
 	bool running = true;
 	while (running)
@@ -601,6 +621,9 @@ int main(void)
 						case SDLK_ESCAPE:
 							running = false;
 						break;
+						case SDLK_c:
+							center_player = !center_player;
+						break;
 						case SDLK_UP:
 							player_try_move(TM_UP);
 						break;
@@ -618,14 +641,22 @@ int main(void)
 			}
 		}
 
-		SDL_SetRenderDrawColor(g_renderer, g_color_bg.r, g_color_bg.g, g_color_bg.b, 255);
+		SDL_SetRenderDrawColor(g_renderer,
+			g_color_bg_shadow.r, g_color_bg_shadow.g, g_color_bg_shadow.b, 255);
 		SDL_RenderClear(g_renderer);
 
 		for (int y = 0; y < g_mg_rect.h; y++)
 		for (int x = 0; x < g_mg_rect.w; x++)
 		{
+			tc_t tc = {x, y};
 			SDL_Rect rect = {x * g_tile_w, y * g_tile_h, g_tile_w, g_tile_h};
-			tile_t const* tile = &g_mg[y * g_mg_rect.w + x];
+			if (center_player)
+			{
+				rect.x += (g_mg_rect.w / 2 - g_player_tc.x) * g_tile_w;
+				rect.y += (g_mg_rect.h / 2 - g_player_tc.y) * g_tile_h;
+			}
+
+			tile_t const* tile = mg_tile(tc);
 
 			char* text = " ";
 			int text_stretch = 0;
@@ -691,6 +722,21 @@ int main(void)
 			{
 				text = " ";
 				bg_color = g_color_bg_shadow;
+			}
+
+			for (int i = 0; i < tile->obj_da.len; i++)
+			{
+				obj_t* obj = tile->obj_da.arr[i];
+				if (obj == NULL)
+				{
+					continue;
+				}
+				if (obj->damaged_effect_time > 0)
+				{
+					text_color = g_color_red;
+					rect.y += obj->damaged_effect_time * 2;
+					obj->damaged_effect_time--;
+				}
 			}
 
 			SDL_SetRenderDrawColor(g_renderer, bg_color.r, bg_color.g, bg_color.b, 255);
