@@ -39,13 +39,6 @@ void draw_text(char const* text, rgb_t color, SDL_Rect rect)
 	assert(texture != NULL);
 	SDL_FreeSurface(surface);
 
-	//SDL_Rect texture_rect;
-	//SDL_QueryTexture(texture, NULL, NULL, &texture_rect.w, &texture_rect.h);
-
-	/* It looks better thay way. */
-	rect.y -= 5;
-	rect.h += 10;
-
 	SDL_RenderCopy(g_renderer, texture, NULL, &rect);
 	SDL_DestroyTexture(texture);
 }
@@ -63,6 +56,8 @@ enum obj_type_t
 	OBJ_CRYSTAL,
 	OBJ_ROCK,
 	OBJ_GRASS,
+	OBJ_BUSH,
+	OBJ_MOSS,
 	OBJ_TREE,
 };
 typedef enum obj_type_t obj_type_t;
@@ -70,6 +65,7 @@ typedef enum obj_type_t obj_type_t;
 struct obj_t
 {
 	obj_type_t type;
+	int life;
 };
 typedef struct obj_t obj_t;
 
@@ -328,6 +324,12 @@ void recompute_vision(void)
 					case OBJ_GRASS:
 						vision -= 3;
 					break;
+					case OBJ_BUSH:
+						vision -= 4;
+					break;
+					case OBJ_MOSS:
+						vision -= 1;
+					break;
 					case OBJ_TREE:
 						vision -= 8;
 					break;
@@ -361,11 +363,32 @@ void player_try_move(tm_t move)
 		return;
 	}
 
-	if (obj_da_contains_type(&dst_player_tile->obj_da, OBJ_ROCK) ||
-		obj_da_contains_type(&dst_player_tile->obj_da, OBJ_CRYSTAL) ||
-		obj_da_contains_type(&dst_player_tile->obj_da, OBJ_TREE))
+	for (int i = 0; i < dst_player_tile->obj_da.len; i++)
 	{
-		return;
+		obj_t* obj = dst_player_tile->obj_da.arr[i];
+		if (obj == NULL)
+		{
+			continue;
+		}
+		switch (obj->type)
+		{
+			case OBJ_ROCK:
+			case OBJ_CRYSTAL:
+			case OBJ_TREE:
+				return;
+			case OBJ_BUSH:
+				obj->life--;
+				if (obj->life <= 0)
+				{
+					obj_da_remove(&dst_player_tile->obj_da, obj);
+					obj_dealloc(obj);
+					recompute_vision();
+				}
+				return;
+			default:
+				;
+			break;
+		}
 	}
 
 	obj_t* player_obj = obj_da_find_type(&src_player_tile->obj_da, OBJ_PLAYER);
@@ -522,15 +545,37 @@ int main(void)
 		
 		if (!tile->is_path && rand() % 5 == 0)
 		{
-			obj_da_add(&tile->obj_da, obj_alloc(OBJ_ROCK));
+			obj_t* obj = obj_alloc(OBJ_ROCK);
+			obj->life = 1000;
+			obj_da_add(&tile->obj_da, obj);
 		}
 		else if (!tile->is_path && rand() % 5 == 0)
 		{
-			obj_da_add(&tile->obj_da, obj_alloc(OBJ_TREE));
+			obj_t* obj = obj_alloc(OBJ_TREE);
+			obj->life = 100;
+			obj_da_add(&tile->obj_da, obj);
 		}
 		else if (!tile->is_path && rand() % 3 != 0)
 		{
-			obj_da_add(&tile->obj_da, obj_alloc(OBJ_GRASS));
+			obj_t* obj = obj_alloc(OBJ_GRASS);
+			obj->life = 4;
+			obj_da_add(&tile->obj_da, obj);
+		}
+		else if (!tile->is_path && rand() % 3 != 0)
+		{
+			obj_t* obj = obj_alloc(OBJ_MOSS);
+			obj->life = 2;
+			obj_da_add(&tile->obj_da, obj);
+		}
+		else if (!tile->is_path && rand() % 3 != 0)
+		{
+			obj_t* obj = obj_alloc(OBJ_BUSH);
+			obj->life = 8;
+			obj_da_add(&tile->obj_da, obj);
+
+			obj = obj_alloc(OBJ_MOSS);
+			obj->life = 2;
+			obj_da_add(&tile->obj_da, obj);
 		}
 	}
 
@@ -583,6 +628,7 @@ int main(void)
 			tile_t const* tile = &g_mg[y * g_mg_rect.w + x];
 
 			char* text = " ";
+			int text_stretch = 0;
 			rgb_t text_color = g_color_white;
 			rgb_t bg_color = g_color_bg;
 			if (obj_da_contains_type(&tile->obj_da, OBJ_PLAYER))
@@ -605,9 +651,20 @@ int main(void)
 				text = "Y";
 				text_color = g_color_light_green;
 			}
+			else if (obj_da_contains_type(&tile->obj_da, OBJ_BUSH))
+			{
+				text = "n";
+				text_stretch = 10;
+				text_color = g_color_green;
+			}
 			else if (obj_da_contains_type(&tile->obj_da, OBJ_GRASS))
 			{
 				text = " v ";
+				text_color = g_color_dark_green;
+			}
+			else if (obj_da_contains_type(&tile->obj_da, OBJ_MOSS))
+			{
+				text = " .. ";
 				text_color = g_color_dark_green;
 			}
 			
@@ -630,7 +687,6 @@ int main(void)
 					bg_color = (rgb_t){0, 0, 0};
 				}
 			}
-
 			if (tile->vision <= 0)
 			{
 				text = " ";
@@ -639,6 +695,9 @@ int main(void)
 
 			SDL_SetRenderDrawColor(g_renderer, bg_color.r, bg_color.g, bg_color.b, 255);
 			SDL_RenderFillRect(g_renderer, &rect);
+
+			rect.y -= 5 + text_stretch;
+			rect.h += 10 + text_stretch + text_stretch / 3;
 			draw_text(text, text_color, rect);
 		}
 
