@@ -261,6 +261,9 @@ tile_t* mg_tile(tc_t tc)
 tc_t g_crystal_tc;
 tc_t g_player_tc;
 
+
+float camera_x, camera_y;
+
 /* Tile move. Represents a move on the grid rather than a tile. */
 typedef tc_t tm_t;
 #define TM_UP    (tm_t){.x =  0, .y = -1}
@@ -489,7 +492,8 @@ int main(void)
 	}
 
 	g_window = SDL_CreateWindow("Why Crystals ?",
-		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, g_window_w, g_window_h, 0);
+		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, g_window_w, g_window_h,
+		SDL_WINDOW_RESIZABLE);
 	assert(g_window != NULL);
 
 	g_renderer = SDL_CreateRenderer(g_window, -1,
@@ -508,8 +512,8 @@ int main(void)
 	g_font = TTF_OpenFontRW(rwops_font, 0, 20);
 	assert(g_font != NULL);
 
-	g_mg_rect.w = g_window_w / g_tile_w;
-	g_mg_rect.h = g_window_h / g_tile_h;
+	g_mg_rect.w = 60;
+	g_mg_rect.h = 60;
 	g_mg = malloc(g_mg_rect.w * g_mg_rect.h * sizeof(tile_t));
 
 	for (int y = 0; y < g_mg_rect.h; y++)
@@ -526,8 +530,11 @@ int main(void)
 	obj_da_add(&mg_tile(g_crystal_tc)->obj_da, obj_alloc(OBJ_CRYSTAL));
 
 	/* Generate the path. */
+	int path_try_count = 0;
 	while (true)
 	{
+		path_try_count++;
+
 		/* Generate a path that may or may not be validated. */
 		int margin = 3;
 		tc_rect_t path_rect = {
@@ -617,6 +624,7 @@ int main(void)
 			tile->is_path = false;
 		}
 	}
+	printf("Path generation try count: %d\n", path_try_count);
 
 	for (int y = 0; y < g_mg_rect.h; y++)
 	for (int x = 0; x < g_mg_rect.w; x++)
@@ -681,11 +689,16 @@ int main(void)
 
 	recompute_vision();
 	
-	bool center_player = false;
+	camera_x = ((float)g_mg_rect.w / 2.0f) * (float)g_tile_w + 0.5f * (float)g_tile_w;
+	camera_y = ((float)g_mg_rect.h / 2.0f) * (float)g_tile_h + 0.5f * (float)g_tile_h;
+
+	float iteration_time = 0.0f;
 
 	bool running = true;
 	while (running)
 	{
+		clock_t clock_start_loop = clock();
+
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
 		{
@@ -694,14 +707,27 @@ int main(void)
 				case SDL_QUIT:
 					running = false;
 				break;
+				case SDL_WINDOWEVENT:
+					switch (event.window.event)
+					{
+						case SDL_WINDOWEVENT_RESIZED:
+							SDL_GetRendererOutputSize(g_renderer, &g_window_w, &g_window_h);
+						break;
+					}
+				break;
 				case SDL_KEYDOWN:
 					switch (event.key.keysym.sym)
 					{
 						case SDLK_ESCAPE:
 							running = false;
 						break;
-						case SDLK_c:
-							center_player = !center_player;
+						case SDLK_KP_PLUS:
+							g_tile_w += 5;
+							g_tile_h += 5;
+						break;
+						case SDLK_KP_MINUS:
+							g_tile_w -= 5;
+							g_tile_h -= 5;
 						break;
 						case SDLK_UP:
 							player_try_move(TM_UP);
@@ -720,6 +746,15 @@ int main(void)
 			}
 		}
 
+		/* Move the camera (smoothly) to keep the player centered. */
+		float const target_camera_x =
+			(float)g_player_tc.x * (float)g_tile_w + 0.5f * (float)g_tile_w;
+		float const target_camera_y =
+			(float)g_player_tc.y * (float)g_tile_h + 0.5f * (float)g_tile_h;
+		float const camera_speed = 0.07f;
+		camera_x += (target_camera_x - camera_x) * camera_speed;
+		camera_y += (target_camera_y - camera_y) * camera_speed;
+
 		SDL_SetRenderDrawColor(g_renderer,
 			g_color_bg_shadow.r, g_color_bg_shadow.g, g_color_bg_shadow.b, 255);
 		SDL_RenderClear(g_renderer);
@@ -728,12 +763,10 @@ int main(void)
 		for (int x = 0; x < g_mg_rect.w; x++)
 		{
 			tc_t tc = {x, y};
-			SDL_Rect rect = {x * g_tile_w, y * g_tile_h, g_tile_w, g_tile_h};
-			if (center_player)
-			{
-				rect.x += (g_mg_rect.w / 2 - g_player_tc.x) * g_tile_w;
-				rect.y += (g_mg_rect.h / 2 - g_player_tc.y) * g_tile_h;
-			}
+			SDL_Rect rect = {
+				x * g_tile_w + g_window_w / 2 - (int)camera_x,
+				y * g_tile_h + g_window_h / 2 - (int)camera_y,
+				g_tile_w, g_tile_h};
 
 			tile_t const* tile = mg_tile(tc);
 
@@ -799,8 +832,7 @@ int main(void)
 			}
 			if (tile->vision <= 0)
 			{
-				text = " ";
-				bg_color = g_color_bg_shadow;
+				continue;
 			}
 
 			for (int i = 0; i < tile->obj_da.len; i++)
@@ -828,7 +860,17 @@ int main(void)
 
 		draw_log();
 
+		{
+			SDL_Rect rect = {0, g_window_h - 5, iteration_time * g_window_w, 5};
+			SDL_SetRenderDrawColor(g_renderer,
+				g_color_white.r, g_color_white.g, g_color_white.b, 255);
+			SDL_RenderFillRect(g_renderer, &rect);
+		}
+
 		SDL_RenderPresent(g_renderer);
+
+		clock_t clock_end_loop = clock();
+		iteration_time = (float)(clock_end_loop - clock_start_loop) / (float)CLOCKS_PER_SEC;
 	}
 
 	TTF_Quit();
