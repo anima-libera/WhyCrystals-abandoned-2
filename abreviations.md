@@ -14,4 +14,3 @@ Abreviation | Meaning
 `src`       | source
 `elem`      | element
 `expr`      | expression
-`wdtc`      | walking distance to crystal
