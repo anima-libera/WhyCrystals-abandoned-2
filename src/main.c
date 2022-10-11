@@ -1,10 +1,13 @@
 
 #include "embedded.h"
 #include "utils.h"
+#include "objects.h"
+#include "mapgrid.h"
 #include <time.h>
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -123,169 +126,7 @@ void draw_log(void)
 	}
 }
 
-enum obj_type_t
-{
-	OBJ_NONE,
-	OBJ_PLAYER,
-	OBJ_CRYSTAL,
-	OBJ_ROCK,
-	OBJ_GRASS,
-	OBJ_BUSH,
-	OBJ_MOSS,
-	OBJ_TREE,
-};
-typedef enum obj_type_t obj_type_t;
-
-struct obj_t
-{
-	obj_type_t type;
-	int life;
-	int damaged_effect_time;
-};
-typedef struct obj_t obj_t;
-
-obj_t* obj_alloc(obj_type_t type)
-{
-	obj_t* obj = malloc(sizeof(obj_t));
-	*obj = (obj_t){.type = type};
-	return obj;
-}
-
-void obj_dealloc(obj_t* obj)
-{
-	free(obj);
-}
-
-struct obj_da_t
-{
-	obj_t** arr;
-	int len, cap;
-};
-typedef struct obj_da_t obj_da_t;
-
-void obj_da_add(obj_da_t* da, obj_t* obj)
-{
-	/* Try inserting in a free spot. */
-	for (int i = 0; i < da->len; i++)
-	{
-		if (da->arr[i] == NULL)
-		{
-			da->arr[i] = obj;
-			return;
-		}
-	}
-	/* No free spot, extend the dynamic array. */
-	DA_LENGTHEN(da->len += 1, da->cap, da->arr, obj_t*);
-	da->arr[da->len-1] = obj;
-}
-
-void obj_da_remove(obj_da_t* da, obj_t* obj)
-{
-	for (int i = 0; i < da->len; i++)
-	{
-		if (da->arr[i] == obj)
-		{
-			da->arr[i] = NULL;
-		}
-	}
-}
-
-obj_t* obj_da_find_type(obj_da_t const* da, obj_type_t type)
-{
-	for (int i = 0; i < da->len; i++)
-	{
-		if (da->arr[i] != NULL && da->arr[i]->type == type)
-		{
-			return da->arr[i];
-		}
-	}
-	return NULL;
-}
-
-bool obj_da_contains_type(obj_da_t const* da, obj_type_t type)
-{
-	return obj_da_find_type(da, type) != NULL;
-}
-
-struct tile_t
-{
-	obj_da_t obj_da;
-	bool is_path;
-	int vision;
-};
-typedef struct tile_t tile_t;
-
 int g_tile_w = 30, g_tile_h = 30;
-
-struct tc_rect_t
-{
-	int x, y, w, h;
-};
-typedef struct tc_rect_t tc_rect_t;
-
-/* Map grid. */
-tile_t* g_mg = NULL;
-tc_rect_t g_mg_rect = {0, 0, -1, -1};
-
-/* Tile coords. */
-struct tc_t
-{
-	int x, y;
-};
-typedef struct tc_t tc_t;
-
-bool tc_eq(tc_t a, tc_t b)
-{
-	return a.x == b.x && a.y == b.y;
-}
-
-bool tc_in_rect(tc_t tc, tc_rect_t rect)
-{
-	return
-		rect.x <= tc.x && tc.x < rect.x + rect.w &&
-		rect.y <= tc.y && tc.y < rect.y + rect.h;
-}
-
-tile_t* mg_tile(tc_t tc)
-{
-	if (tc_in_rect(tc, g_mg_rect))
-	{
-		return &g_mg[tc.y * g_mg_rect.w + tc.x];
-	}
-	else
-	{
-		return NULL;
-	}
-}
-
-tc_t g_crystal_tc;
-tc_t g_player_tc;
-
-
-float camera_x, camera_y;
-
-/* Tile move. Represents a move on the grid rather than a tile. */
-typedef tc_t tm_t;
-#define TM_UP    (tm_t){.x =  0, .y = -1}
-#define TM_RIGHT (tm_t){.x = +1, .y =  0}
-#define TM_DOWN  (tm_t){.x =  0, .y = +1}
-#define TM_LEFT  (tm_t){.x = -1, .y =  0}
-#define TM_ONE_ALL (tm_t[]){TM_UP, TM_RIGHT, TM_DOWN, TM_LEFT}
-
-tm_t rand_tm_one(void)
-{
-	return TM_ONE_ALL[rand() % 4];
-}
-
-bool tm_one_orthogonal(tm_t a, tm_t b)
-{
-	return !((a.x != 0 && b.x != 0) || (a.y != 0 && b.y != 0));
-}
-
-tc_t tc_add_tm(tc_t tc, tm_t move)
-{
-	return (tc_t){.x = tc.x + move.x, .y = tc.y + move.y};
-}
 
 struct bresenham_it_t
 {
@@ -369,7 +210,7 @@ void recompute_vision(void)
 		tile->vision = 0;
 	}
 
-	tc_t src_tc = g_player_tc;
+	tc_t src_tc = loc_tc(get_obj(g_player_oid)->loc);
 
 	for (int y = 0; y < g_mg_rect.h; y++)
 	for (int x = 0; x < g_mg_rect.w; x++)
@@ -391,13 +232,14 @@ void recompute_vision(void)
 			{
 				continue;
 			}
-			for (int i = 0; i < tile->obj_da.len; i++)
+			for (int i = 0; i < tile->oid_da.len; i++)
 			{
-				if (tile->obj_da.arr[i] == NULL)
+				obj_t* obj = get_obj(tile->oid_da.arr[i]);
+				if (obj == NULL)
 				{
 					continue;
 				}
-				switch (tile->obj_da.arr[i]->type)
+				switch (obj->type)
 				{
 					case OBJ_GRASS:
 						vision -= 3;
@@ -433,17 +275,18 @@ void recompute_vision(void)
 
 void player_try_move(tm_t move)
 {
-	tile_t* src_player_tile = mg_tile(g_player_tc);
-	tc_t dst_player_tc = tc_add_tm(g_player_tc, move);
+	obj_t* player_obj = get_obj(g_player_oid);
+	tc_t dst_player_tc = tc_add_tm(loc_tc(player_obj->loc), move);
 	tile_t* dst_player_tile = mg_tile(dst_player_tc);
 	if (dst_player_tile == NULL)
 	{
 		return;
 	}
 
-	for (int i = 0; i < dst_player_tile->obj_da.len; i++)
+	for (int i = 0; i < dst_player_tile->oid_da.len; i++)
 	{
-		obj_t* obj = dst_player_tile->obj_da.arr[i];
+		oid_t oid = dst_player_tile->oid_da.arr[i];
+		obj_t* obj = get_obj(oid);
 		if (obj == NULL)
 		{
 			continue;
@@ -459,8 +302,8 @@ void player_try_move(tm_t move)
 				obj->damaged_effect_time = 2;
 				if (obj->life <= 0)
 				{
-					obj_da_remove(&dst_player_tile->obj_da, obj);
-					obj_dealloc(obj);
+					oid_da_remove(&dst_player_tile->oid_da, oid);
+					obj_dealloc(oid);
 					recompute_vision();
 					log_text("Killed a bush.");
 				}
@@ -475,10 +318,7 @@ void player_try_move(tm_t move)
 		}
 	}
 
-	obj_t* player_obj = obj_da_find_type(&src_player_tile->obj_da, OBJ_PLAYER);
-	obj_da_remove(&src_player_tile->obj_da, player_obj);
-	obj_da_add(&dst_player_tile->obj_da, player_obj);
-	g_player_tc = dst_player_tc;
+	obj_move(g_player_oid, dst_player_tc);
 	recompute_vision();
 }
 
@@ -524,10 +364,10 @@ int main(void)
 		*tile = (tile_t){0};
 	}
 
-	g_crystal_tc = (tc_t){
+	tc_t crystal_tc = {
 		.x = g_mg_rect.x + g_mg_rect.w / 4 + rand() % (g_mg_rect.w / 9),
 		.y = g_mg_rect.y + g_mg_rect.h / 3 + rand() % (g_mg_rect.h / 3)};
-	obj_da_add(&mg_tile(g_crystal_tc)->obj_da, obj_alloc(OBJ_CRYSTAL));
+	g_crystal_oid = obj_alloc(OBJ_CRYSTAL, tc_to_loc(crystal_tc));
 
 	/* Generate the path. */
 	int path_try_count = 0;
@@ -540,7 +380,7 @@ int main(void)
 		tc_rect_t path_rect = {
 			g_mg_rect.x + margin, g_mg_rect.y + margin,
 			g_mg_rect.w - margin, g_mg_rect.h - 2 * margin};
-		tc_t tc = g_crystal_tc;
+		tc_t tc = crystal_tc;
 		tm_t direction = rand_tm_one();
 		int same_direction_steps = 0;
 		while (tc_in_rect(tc, path_rect))
@@ -650,45 +490,40 @@ int main(void)
 		
 		if (rand() % 5 == 0)
 		{
-			obj_t* obj = obj_alloc(OBJ_ROCK);
-			obj->life = 1000;
-			obj_da_add(&tile->obj_da, obj);
+			oid_t oid = obj_alloc(OBJ_ROCK, tc_to_loc(tc));
+			get_obj(oid)->life = 1000;
 		}
 		else if (rand() % (neighbor_to_path ? 2 : 5) == 0)
 		{
-			obj_t* obj = obj_alloc(OBJ_TREE);
-			obj->life = 100;
-			obj_da_add(&tile->obj_da, obj);
+			oid_t oid = obj_alloc(OBJ_TREE, tc_to_loc(tc));
+			get_obj(oid)->life = 100;
 		}
 		else if (rand() % 3 != 0)
 		{
-			obj_t* obj = obj_alloc(OBJ_GRASS);
-			obj->life = 4;
-			obj_da_add(&tile->obj_da, obj);
+			oid_t oid = obj_alloc(OBJ_GRASS, tc_to_loc(tc));
+			get_obj(oid)->life = 4;
 		}
 		else if (rand() % 3 != 0)
 		{
-			obj_t* obj = obj_alloc(OBJ_MOSS);
-			obj->life = 2;
-			obj_da_add(&tile->obj_da, obj);
+			oid_t oid = obj_alloc(OBJ_MOSS, tc_to_loc(tc));
+			get_obj(oid)->life = 2;
 		}
 		else if (rand() % 3 != 0)
 		{
-			obj_t* obj = obj_alloc(OBJ_BUSH);
-			obj->life = 8;
-			obj_da_add(&tile->obj_da, obj);
+			oid_t oid = obj_alloc(OBJ_BUSH, tc_to_loc(tc));
+			get_obj(oid)->life = 8;
 
-			obj = obj_alloc(OBJ_MOSS);
-			obj->life = 2;
-			obj_da_add(&tile->obj_da, obj);
+			oid = obj_alloc(OBJ_MOSS, tc_to_loc(tc));
+			get_obj(oid)->life = 2;
 		}
 	}
 
-	g_player_tc = (tc_t){g_mg_rect.w / 2, g_mg_rect.h / 2};
-	obj_da_add(&mg_tile(g_player_tc)->obj_da, obj_alloc(OBJ_PLAYER));
+	tc_t player_tc = {g_mg_rect.w / 2, g_mg_rect.h / 2};
+	g_player_oid = obj_alloc(OBJ_PLAYER, tc_to_loc(player_tc));
 
 	recompute_vision();
 	
+	float camera_x, camera_y;
 	camera_x = ((float)g_mg_rect.w / 2.0f) * (float)g_tile_w + 0.5f * (float)g_tile_w;
 	camera_y = ((float)g_mg_rect.h / 2.0f) * (float)g_tile_h + 0.5f * (float)g_tile_h;
 
@@ -747,13 +582,16 @@ int main(void)
 		}
 
 		/* Move the camera (smoothly) to keep the player centered. */
-		float const target_camera_x =
-			(float)g_player_tc.x * (float)g_tile_w + 0.5f * (float)g_tile_w;
-		float const target_camera_y =
-			(float)g_player_tc.y * (float)g_tile_h + 0.5f * (float)g_tile_h;
-		float const camera_speed = 0.07f;
-		camera_x += (target_camera_x - camera_x) * camera_speed;
-		camera_y += (target_camera_y - camera_y) * camera_speed;
+		{
+			tc_t player_tc = loc_tc(get_obj(g_player_oid)->loc);
+			float const target_camera_x =
+				(float)player_tc.x * (float)g_tile_w + 0.5f * (float)g_tile_w;
+			float const target_camera_y =
+				(float)player_tc.y * (float)g_tile_h + 0.5f * (float)g_tile_h;
+			float const camera_speed = 0.07f;
+			camera_x += (target_camera_x - camera_x) * camera_speed;
+			camera_y += (target_camera_y - camera_y) * camera_speed;
+		}
 
 		SDL_SetRenderDrawColor(g_renderer,
 			g_color_bg_shadow.r, g_color_bg_shadow.g, g_color_bg_shadow.b, 255);
@@ -774,38 +612,38 @@ int main(void)
 			int text_stretch = 0;
 			rgb_t text_color = g_color_white;
 			rgb_t bg_color = g_color_bg;
-			if (obj_da_contains_type(&tile->obj_da, OBJ_PLAYER))
+			if (oid_da_contains_type(&tile->oid_da, OBJ_PLAYER))
 			{
 				text = "@";
 				text_color = g_color_yellow;
 			}
-			else if (obj_da_contains_type(&tile->obj_da, OBJ_CRYSTAL))
+			else if (oid_da_contains_type(&tile->oid_da, OBJ_CRYSTAL))
 			{
 				text = "A";
 				text_color = g_color_red;
 			}
-			else if (obj_da_contains_type(&tile->obj_da, OBJ_ROCK))
+			else if (oid_da_contains_type(&tile->oid_da, OBJ_ROCK))
 			{
 				text = "#";
 				text_color = g_color_white;
 			}
-			else if (obj_da_contains_type(&tile->obj_da, OBJ_TREE))
+			else if (oid_da_contains_type(&tile->oid_da, OBJ_TREE))
 			{
 				text = "Y";
 				text_color = g_color_light_green;
 			}
-			else if (obj_da_contains_type(&tile->obj_da, OBJ_BUSH))
+			else if (oid_da_contains_type(&tile->oid_da, OBJ_BUSH))
 			{
 				text = "n";
 				text_stretch = 10;
 				text_color = g_color_green;
 			}
-			else if (obj_da_contains_type(&tile->obj_da, OBJ_GRASS))
+			else if (oid_da_contains_type(&tile->oid_da, OBJ_GRASS))
 			{
 				text = " v ";
 				text_color = g_color_dark_green;
 			}
-			else if (obj_da_contains_type(&tile->obj_da, OBJ_MOSS))
+			else if (oid_da_contains_type(&tile->oid_da, OBJ_MOSS))
 			{
 				text = " .. ";
 				text_color = g_color_dark_green;
@@ -835,9 +673,9 @@ int main(void)
 				continue;
 			}
 
-			for (int i = 0; i < tile->obj_da.len; i++)
+			for (int i = 0; i < tile->oid_da.len; i++)
 			{
-				obj_t* obj = tile->obj_da.arr[i];
+				obj_t* obj = get_obj(tile->oid_da.arr[i]);
 				if (obj == NULL)
 				{
 					continue;
