@@ -28,10 +28,6 @@ typedef struct obj_entry_t obj_entry_t;
 obj_entry_t* g_obj_da;
 int g_obj_da_len, g_obj_da_cap;
 
-/* `0` cannot be the generation of an entry in `g_obj_da`, so `(oid_t){0}`
- * can be used to represent a null id or something. */
-#define OID_NULL (oid_t){0}
-
 bool oid_eq(oid_t oid_a, oid_t oid_b)
 {
 	return oid_a.index == oid_b.index && oid_a.generation == oid_b.generation;
@@ -93,6 +89,7 @@ void obj_dealloc(oid_t oid)
 	if (entry->generation == oid.generation)
 	{
 		entry->exists = false;
+		oid_da_remove(&mg_tile(loc_tc(entry->obj->loc))->oid_da, oid);
 	}
 	else
 	{
@@ -174,3 +171,23 @@ bool oid_da_contains_type(oid_da_t const* da, obj_type_t type)
 
 oid_t g_crystal_oid = {0};
 oid_t g_player_oid = {0};
+
+bool oid_iter(oid_t* oid)
+{
+	assert(oid != NULL);
+	assert_oid_makes_sens(*oid);
+	if (!oid_eq(*oid, OID_NULL))
+	{
+		oid->index++;
+	}
+	while (oid->index < g_obj_da_len)
+	{
+		if (g_obj_da[oid->index].exists)
+		{
+			oid->generation = g_obj_da[oid->index].generation;
+			return true;
+		}
+		oid->index++;
+	}
+	return false;
+}

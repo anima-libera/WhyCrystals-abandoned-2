@@ -19,7 +19,6 @@ loc_t tc_to_loc(tc_t tc);
 
 enum obj_type_t
 {
-	OBJ_NONE,
 	OBJ_PLAYER,
 	OBJ_CRYSTAL,
 	OBJ_ROCK,
@@ -27,6 +26,7 @@ enum obj_type_t
 	OBJ_BUSH,
 	OBJ_MOSS,
 	OBJ_TREE,
+	OBJ_SLIME,
 };
 typedef enum obj_type_t obj_type_t;
 
@@ -35,7 +35,8 @@ typedef enum obj_type_t obj_type_t;
  * References to objects should be `oid_t`s instead of pointers. That is because
  * when an object is destroyed, its `oid_t` is still safe to use (it just does not
  * point to an object anymore) unlike a pointer.
- * Note that it never makes sens to modify an `oid_t`. */
+ * Note that it should not make sens to modify an `oid_t`
+ * (except when itereating over all the objects). */
 struct oid_t
 {
 	/* Index in `g_obj_da`. */
@@ -46,6 +47,10 @@ struct oid_t
 	int generation;
 };
 typedef struct oid_t oid_t;
+
+/* `0` cannot be the generation of an entry in `g_obj_da`, so `(oid_t){0}`
+ * can be used to represent a null id or something. */
+#define OID_NULL (oid_t){0}
 
 bool oid_eq(oid_t oid_a, oid_t oid_b);
 
@@ -87,10 +92,13 @@ struct visual_effect_t
 	int t;
 	int t_max;
 	visual_effect_type_t type;
-	tm_t src;
+	tm_t dir;
 };
 typedef struct visual_effect_t visual_effect_t;
 
+/* Object.
+ * Pretty much everything that physically exists
+ * in the world is or should be an object. */
 struct obj_t
 {
 	obj_type_t type;
@@ -101,5 +109,12 @@ struct obj_t
 	visual_effect_t visual_effect;
 };
 typedef struct obj_t obj_t;
+
+/* Iterate over all the objects there is, like so:
+ *    oid_t oid = OID_NULL;
+ *    while (oid_iter(&oid)) {...}
+ * Every oid will be refering to an existing object.
+ * Note that it is even possible to destroy the referred object. */
+bool oid_iter(oid_t* oid);
 
 #endif /* WHYCRYSTALS_HEADER_OBJECTS_ */

@@ -33,3 +33,8 @@ tm_t tm_reverse(tm_t move)
 {
     return (tm_t){.x = -move.x, .y = -move.y};
 }
+
+tm_t tc_diff_as_tm(tc_t src, tc_t dst)
+{
+    return (tm_t){.x = dst.x - src.x, .y = dst.y - src.y};
+}

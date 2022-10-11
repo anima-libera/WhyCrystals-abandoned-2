@@ -43,6 +43,7 @@ rgb_t g_color_red = {230, 40, 35};
 rgb_t g_color_green = {10, 240, 45};
 rgb_t g_color_light_green = {40, 240, 90};
 rgb_t g_color_dark_green = {10, 160, 40};
+rgb_t g_color_cyan = {20, 200, 180};
 
 SDL_Texture* text_to_texture(char const* text, rgba_t color)
 {
@@ -77,8 +78,10 @@ void log_text(char* format, ...)
 	va_list va;
 	va_start(va, format);
 	int text_len = vsnprintf(NULL, 0, format, va);
+	va_end(va);
 	assert(text_len >= 0);
 	char* text = malloc(text_len + 1);
+	va_start(va, format);
 	vsnprintf(text, text_len + 1, format, va);
 	va_end(va);
 
@@ -270,49 +273,102 @@ void recompute_vision(void)
 			}
 		}
 	}
-
 }
 
-void player_try_move(tm_t move)
+char const* obj_type_name(obj_type_t type)
 {
-	obj_t* player_obj = get_obj(g_player_oid);
-	tc_t dst_player_tc = tc_add_tm(loc_tc(player_obj->loc), move);
-	tile_t* dst_player_tile = mg_tile(dst_player_tc);
-	if (dst_player_tile == NULL)
+	switch (type)
+	{
+		case OBJ_PLAYER:
+			return "player";
+		case OBJ_CRYSTAL:
+			return "crystal";
+		case OBJ_ROCK:
+			return "rock";
+		case OBJ_GRASS:
+			return "grass";
+		case OBJ_BUSH:
+			return "bush";
+		case OBJ_MOSS:
+			return "moss";
+		case OBJ_TREE:
+			return "tree";
+		case OBJ_SLIME:
+			return "slime";
+		default:
+			assert(false);
+	}
+}
+
+void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
+{
+	obj_t* obj_attacker = get_obj(oid_attacker);
+	obj_t* obj_target = get_obj(oid_target);
+	if (obj_target == NULL)
+	{
+		return;
+	}
+	tc_t tc_attacker = loc_tc(obj_attacker->loc);
+	tc_t tc_target = loc_tc(obj_target->loc);
+	tm_t dir = tc_diff_as_tm(tc_attacker, tc_target);
+	bool event_visible = mg_tile(tc_attacker)->vision > 0 || mg_tile(tc_target)->vision > 0;
+	
+	obj_target->life--;
+	if (obj_target->life <= 0)
+	{
+		obj_dealloc(oid_target);
+		recompute_vision();
+		if (event_visible)
+		{
+			log_text("A %s killed a %s.",
+				obj_type_name(obj_attacker->type), obj_type_name(obj_target->type));
+		}
+	}
+	else
+	{
+		obj_target->visual_effect.type = VISUAL_EFFECT_DAMAGED;
+		obj_target->visual_effect.t = 0;
+		obj_target->visual_effect.t_max = 20;
+		obj_target->visual_effect.dir = dir;
+		if (event_visible)
+		{
+			log_text("A %s hit a %s.",
+				obj_type_name(obj_attacker->type), obj_type_name(obj_target->type));
+		}
+	}
+	obj_attacker->visual_effect.type = VISUAL_EFFECT_MOVE;
+	obj_attacker->visual_effect.t = 0;
+	obj_attacker->visual_effect.t_max = 6;
+	obj_attacker->visual_effect.dir = dir;
+}
+
+void obj_try_move(oid_t oid, tm_t move)
+{
+	tc_t dst_tc = tc_add_tm(loc_tc(get_obj(oid)->loc), move);
+	tile_t* dst_tile = mg_tile(dst_tc);
+	if (dst_tile == NULL)
 	{
 		return;
 	}
 
-	for (int i = 0; i < dst_player_tile->oid_da.len; i++)
+	for (int i = 0; i < dst_tile->oid_da.len; i++)
 	{
-		oid_t oid = dst_player_tile->oid_da.arr[i];
-		obj_t* obj = get_obj(oid);
-		if (obj == NULL)
+		oid_t oid_on_dst = dst_tile->oid_da.arr[i];
+		obj_t* obj_on_dst = get_obj(oid_on_dst);
+		if (obj_on_dst == NULL)
 		{
 			continue;
 		}
-		switch (obj->type)
+		switch (obj_on_dst->type)
 		{
 			case OBJ_ROCK:
 			case OBJ_CRYSTAL:
 			case OBJ_TREE:
 				return;
 			case OBJ_BUSH:
-				obj->life--;
-				if (obj->life <= 0)
-				{
-					oid_da_remove(&dst_player_tile->oid_da, oid);
-					obj_dealloc(oid);
-					recompute_vision();
-					log_text("Killed a bush.");
-				}
-				else
-				{
-					obj->visual_effect.type = VISUAL_EFFECT_DAMAGED;
-					obj->visual_effect.t = 0;
-					obj->visual_effect.t_max = 4;
-					log_text("Damaged a bush.");
-				}
+			case OBJ_SLIME:
+			case OBJ_PLAYER:
+				obj_hits_obj(oid, oid_on_dst);
 				return;
 			default:
 				;
@@ -320,13 +376,20 @@ void player_try_move(tm_t move)
 		}
 	}
 
-	obj_move(g_player_oid, dst_player_tc);
-	recompute_vision();
-	player_obj = get_obj(g_player_oid);
-	player_obj->visual_effect.type = VISUAL_EFFECT_MOVE;
-	player_obj->visual_effect.t = 0;
-	player_obj->visual_effect.t_max = 4;
-	player_obj->visual_effect.src = tm_reverse(move);
+	obj_move(oid, dst_tc);
+
+	obj_t* obj = get_obj(oid);
+	obj->visual_effect.type = VISUAL_EFFECT_MOVE;
+	obj->visual_effect.t = 0;
+	obj->visual_effect.t_max = 8;
+	obj->visual_effect.dir = tm_reverse(move);
+}
+
+int interpolate(int progression, int progression_max, int value_min, int value_max)
+{
+	return
+		(value_min * (progression_max - progression) + progression * value_max)
+		/ progression_max;
 }
 
 int main(void)
@@ -523,10 +586,21 @@ int main(void)
 			oid = obj_alloc(OBJ_MOSS, tc_to_loc(tc));
 			get_obj(oid)->life = 2;
 		}
+
+		if (!oid_da_contains_type(&tile->oid_da, OBJ_ROCK) &&
+			!oid_da_contains_type(&tile->oid_da, OBJ_TREE) &&
+			!oid_da_contains_type(&tile->oid_da, OBJ_CRYSTAL) &&
+			!oid_da_contains_type(&tile->oid_da, OBJ_PLAYER) &&
+			rand() % 20 == 0)
+		{
+			oid_t oid = obj_alloc(OBJ_SLIME, tc_to_loc(tc));
+			get_obj(oid)->life = 5;
+		}
 	}
 
 	tc_t player_tc = {g_mg_rect.w / 2, g_mg_rect.h / 2};
 	g_player_oid = obj_alloc(OBJ_PLAYER, tc_to_loc(player_tc));
+	get_obj(g_player_oid)->life = 10;
 
 	recompute_vision();
 	
@@ -540,6 +614,8 @@ int main(void)
 	while (running)
 	{
 		clock_t clock_start_loop = clock();
+
+		bool perform_turn = false;
 
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
@@ -572,20 +648,42 @@ int main(void)
 							g_tile_h -= 5;
 						break;
 						case SDLK_UP:
-							player_try_move(TM_UP);
+							obj_try_move(g_player_oid, TM_UP);
+							perform_turn = true;
 						break;
 						case SDLK_RIGHT:
-							player_try_move(TM_RIGHT);
+							obj_try_move(g_player_oid, TM_RIGHT);
+							perform_turn = true;
 						break;
 						case SDLK_DOWN:
-							player_try_move(TM_DOWN);
+							obj_try_move(g_player_oid, TM_DOWN);
+							perform_turn = true;
 						break;
 						case SDLK_LEFT:
-							player_try_move(TM_LEFT);
+							obj_try_move(g_player_oid, TM_LEFT);
+							perform_turn = true;
 						break;
 					}
 				break;
 			}
+		}
+
+		if (perform_turn)
+		{
+			oid_t oid = OID_NULL;
+			while (oid_iter(&oid))
+			{
+				obj_t* obj = get_obj(oid);
+				if (obj->type == OBJ_SLIME)
+				{
+					if (rand() % 3 == 0)
+					{
+						obj_try_move(oid, rand_tm_one());
+					}
+				}
+			}
+
+			recompute_vision();
 		}
 
 		/* Move the camera (smoothly) to keep the player centered. */
@@ -604,14 +702,16 @@ int main(void)
 			g_color_bg_shadow.r, g_color_bg_shadow.g, g_color_bg_shadow.b, 255);
 		SDL_RenderClear(g_renderer);
 
+		for (int pass = 0; pass < 2; pass++)
 		for (int y = 0; y < g_mg_rect.h; y++)
 		for (int x = 0; x < g_mg_rect.w; x++)
 		{
 			tc_t tc = {x, y};
-			SDL_Rect rect = {
+			SDL_Rect base_rect = {
 				x * g_tile_w + g_window_w / 2 - (int)camera_x,
 				y * g_tile_h + g_window_h / 2 - (int)camera_y,
 				g_tile_w, g_tile_h};
+			SDL_Rect rect = {base_rect.x, base_rect.y, base_rect.w, base_rect.h};
 
 			tile_t const* tile = mg_tile(tc);
 
@@ -644,6 +744,11 @@ int main(void)
 				text = "n";
 				text_stretch = 10;
 				text_color = g_color_green;
+			}
+			else if (oid_da_contains_type(&tile->oid_da, OBJ_SLIME))
+			{
+				text = "o";
+				text_color = g_color_cyan;
 			}
 			else if (oid_da_contains_type(&tile->oid_da, OBJ_GRASS))
 			{
@@ -692,23 +797,32 @@ int main(void)
 					if (obj->visual_effect.type == VISUAL_EFFECT_DAMAGED)
 					{
 						text_color = g_color_red;
-						rect.y += (obj->visual_effect.t_max - obj->visual_effect.t) * 2;
-					}
-					else if (obj->visual_effect.type == VISUAL_EFFECT_MOVE)
-					{
-						tc_t src = tc_add_tm(tc, obj->visual_effect.src);
+
+						tc_t src = tc_add_tm(tc, obj->visual_effect.dir);
 						SDL_Rect src_rect = {
 							src.x * g_tile_w + g_window_w / 2 - (int)camera_x,
 							src.y * g_tile_h + g_window_h / 2 - (int)camera_y,
 							g_tile_w, g_tile_h};
-						rect.x =
-							(src_rect.x * (obj->visual_effect.t_max - obj->visual_effect.t) +
-								rect.x * obj->visual_effect.t)
-							/ obj->visual_effect.t_max;
-						rect.y =
-							(src_rect.y * (obj->visual_effect.t_max - obj->visual_effect.t) +
-								rect.y * obj->visual_effect.t)
-							/ obj->visual_effect.t_max;
+						rect.x = interpolate(
+							obj->visual_effect.t + 40, obj->visual_effect.t_max + 40,
+							src_rect.x, rect.x);
+						rect.y = interpolate(
+							obj->visual_effect.t + 40, obj->visual_effect.t_max + 40,
+							src_rect.y, rect.y);
+					}
+					else if (obj->visual_effect.type == VISUAL_EFFECT_MOVE)
+					{
+						tc_t src = tc_add_tm(tc, obj->visual_effect.dir);
+						SDL_Rect src_rect = {
+							src.x * g_tile_w + g_window_w / 2 - (int)camera_x,
+							src.y * g_tile_h + g_window_h / 2 - (int)camera_y,
+							g_tile_w, g_tile_h};
+						rect.x = interpolate(
+							obj->visual_effect.t, obj->visual_effect.t_max,
+							src_rect.x, rect.x);
+						rect.y = interpolate(
+							obj->visual_effect.t, obj->visual_effect.t_max,
+							src_rect.y, rect.y);
 					}
 					obj->visual_effect.t++;
 					if (obj->visual_effect.t >= obj->visual_effect.t_max)
@@ -718,12 +832,17 @@ int main(void)
 				}
 			}
 
-			SDL_SetRenderDrawColor(g_renderer, bg_color.r, bg_color.g, bg_color.b, 255);
-			SDL_RenderFillRect(g_renderer, &rect);
-
-			rect.y -= 5 + text_stretch;
-			rect.h += 10 + text_stretch + text_stretch / 3;
-			draw_text_stetch(text, text_color, rect);
+			if (pass == 0)
+			{
+				SDL_SetRenderDrawColor(g_renderer, bg_color.r, bg_color.g, bg_color.b, 255);
+				SDL_RenderFillRect(g_renderer, &base_rect);
+			}
+			else
+			{
+				rect.y -= 5 + text_stretch;
+				rect.h += 10 + text_stretch + text_stretch / 3;
+				draw_text_stetch(text, text_color, rect);
+			}
 		}
 
 		draw_log();
