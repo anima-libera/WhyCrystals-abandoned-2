@@ -32,5 +32,6 @@ typedef tc_t tm_t;
 tm_t rand_tm_one(void);
 bool tm_one_orthogonal(tm_t a, tm_t b);
 tc_t tc_add_tm(tc_t tc, tm_t move);
+tm_t tm_reverse(tm_t move);
 
 #endif /* WHYCRYSTALS_HEADER_TC_ */

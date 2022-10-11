@@ -74,13 +74,31 @@ bool oid_da_contains_type(oid_da_t const* da, obj_type_t type);
 extern oid_t g_crystal_oid;
 extern oid_t g_player_oid;
 
+enum visual_effect_type_t
+{
+	VISUAL_EFFECT_MOVE,
+	VISUAL_EFFECT_DAMAGED,
+};
+typedef enum visual_effect_type_t visual_effect_type_t;
+
+/* TODO: Make this better. */
+struct visual_effect_t
+{
+	int t;
+	int t_max;
+	visual_effect_type_t type;
+	tm_t src;
+};
+typedef struct visual_effect_t visual_effect_t;
+
 struct obj_t
 {
 	obj_type_t type;
 	loc_t loc;
 
 	int life;
-	int damaged_effect_time;
+
+	visual_effect_t visual_effect;
 };
 typedef struct obj_t obj_t;
 

@@ -299,7 +299,6 @@ void player_try_move(tm_t move)
 				return;
 			case OBJ_BUSH:
 				obj->life--;
-				obj->damaged_effect_time = 2;
 				if (obj->life <= 0)
 				{
 					oid_da_remove(&dst_player_tile->oid_da, oid);
@@ -309,6 +308,9 @@ void player_try_move(tm_t move)
 				}
 				else
 				{
+					obj->visual_effect.type = VISUAL_EFFECT_DAMAGED;
+					obj->visual_effect.t = 0;
+					obj->visual_effect.t_max = 4;
 					log_text("Damaged a bush.");
 				}
 				return;
@@ -320,6 +322,11 @@ void player_try_move(tm_t move)
 
 	obj_move(g_player_oid, dst_player_tc);
 	recompute_vision();
+	player_obj = get_obj(g_player_oid);
+	player_obj->visual_effect.type = VISUAL_EFFECT_MOVE;
+	player_obj->visual_effect.t = 0;
+	player_obj->visual_effect.t_max = 4;
+	player_obj->visual_effect.src = tm_reverse(move);
 }
 
 int main(void)
@@ -680,11 +687,34 @@ int main(void)
 				{
 					continue;
 				}
-				if (obj->damaged_effect_time > 0)
+				if (obj->visual_effect.t_max > 0)
 				{
-					text_color = g_color_red;
-					rect.y += obj->damaged_effect_time * 2;
-					obj->damaged_effect_time--;
+					if (obj->visual_effect.type == VISUAL_EFFECT_DAMAGED)
+					{
+						text_color = g_color_red;
+						rect.y += (obj->visual_effect.t_max - obj->visual_effect.t) * 2;
+					}
+					else if (obj->visual_effect.type == VISUAL_EFFECT_MOVE)
+					{
+						tc_t src = tc_add_tm(tc, obj->visual_effect.src);
+						SDL_Rect src_rect = {
+							src.x * g_tile_w + g_window_w / 2 - (int)camera_x,
+							src.y * g_tile_h + g_window_h / 2 - (int)camera_y,
+							g_tile_w, g_tile_h};
+						rect.x =
+							(src_rect.x * (obj->visual_effect.t_max - obj->visual_effect.t) +
+								rect.x * obj->visual_effect.t)
+							/ obj->visual_effect.t_max;
+						rect.y =
+							(src_rect.y * (obj->visual_effect.t_max - obj->visual_effect.t) +
+								rect.y * obj->visual_effect.t)
+							/ obj->visual_effect.t_max;
+					}
+					obj->visual_effect.t++;
+					if (obj->visual_effect.t >= obj->visual_effect.t_max)
+					{
+						obj->visual_effect.t_max = 0;
+					}
 				}
 			}
 

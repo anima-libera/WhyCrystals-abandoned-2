@@ -28,3 +28,8 @@ tc_t tc_add_tm(tc_t tc, tm_t move)
 {
 	return (tc_t){.x = tc.x + move.x, .y = tc.y + move.y};
 }
+
+tm_t tm_reverse(tm_t move)
+{
+    return (tm_t){.x = -move.x, .y = -move.y};
+}
