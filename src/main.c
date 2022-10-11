@@ -120,7 +120,7 @@ void draw_log(void)
 		SDL_DestroyTexture(texture);
 		SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_NONE);
 
-		if (g_turn_number > g_log_da[i].turn_number + 8)
+		if (g_turn_number > g_log_da[i].turn_number + 16)
 		{
 			g_log_da[i].time_remaining--;
 		}
@@ -704,7 +704,7 @@ int main(void)
 				(float)player_tc.x * (float)g_tile_w + 0.5f * (float)g_tile_w;
 			float const target_camera_y =
 				(float)player_tc.y * (float)g_tile_h + 0.5f * (float)g_tile_h;
-			float const camera_speed = 0.07f;
+			float const camera_speed = 0.035f;
 			camera_x += (target_camera_x - camera_x) * camera_speed;
 			camera_y += (target_camera_y - camera_y) * camera_speed;
 		}
