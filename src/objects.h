@@ -81,7 +81,9 @@ extern oid_t g_player_oid;
 
 enum visual_effect_type_t
 {
+	VISUAL_EFFECT_NONE,
 	VISUAL_EFFECT_MOVE,
+	VISUAL_EFFECT_ATTACK,
 	VISUAL_EFFECT_DAMAGED,
 };
 typedef enum visual_effect_type_t visual_effect_type_t;

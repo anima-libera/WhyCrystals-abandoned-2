@@ -63,10 +63,13 @@ void draw_text_stetch(char const* text, rgb_t color, SDL_Rect rect)
 	SDL_DestroyTexture(texture);
 }
 
+int g_turn_number = 0;
+
 struct log_entry_t
 {
 	char* text;
-	int time;
+	int turn_number;
+	int time_remaining;
 };
 typedef struct log_entry_t log_entry_t;
 
@@ -92,7 +95,8 @@ void log_text(char* format, ...)
 	}
 	g_log_da[0] = (log_entry_t){
 		.text = text,
-		.time = 200};
+		.turn_number = g_turn_number,
+		.time_remaining = 200};
 }
 
 void draw_log(void)
@@ -100,7 +104,7 @@ void draw_log(void)
 	int y = g_window_h - 30;
 	for (int i = 0; i < g_log_len; i++)
 	{
-		int alpha = min(255, g_log_da[i].time * 6);
+		int alpha = min(255, g_log_da[i].time_remaining * 6);
 
 		SDL_Texture* texture = text_to_texture(g_log_da[i].text,
 			rgb_to_rgba(g_color_white, 255));
@@ -116,12 +120,15 @@ void draw_log(void)
 		SDL_DestroyTexture(texture);
 		SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_NONE);
 
-		g_log_da[i].time--;
+		if (g_turn_number > g_log_da[i].turn_number + 8)
+		{
+			g_log_da[i].time_remaining--;
+		}
 
 		y -= rect.h;
 	}
 
-	if (g_log_len > 0 && g_log_da[g_log_len-1].time <= 0)
+	if (g_log_len > 0 && g_log_da[g_log_len-1].time_remaining <= 0)
 	{
 		free(g_log_da[g_log_len-1].text);
 		g_log_da[g_log_len-1] = (log_entry_t){0};
@@ -326,19 +333,22 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 	}
 	else
 	{
-		obj_target->visual_effect.type = VISUAL_EFFECT_DAMAGED;
-		obj_target->visual_effect.t = 0;
-		obj_target->visual_effect.t_max = 20;
-		obj_target->visual_effect.dir = dir;
+		if (obj_target->visual_effect.type != VISUAL_EFFECT_ATTACK)
+		{
+			obj_target->visual_effect.type = VISUAL_EFFECT_DAMAGED;
+			obj_target->visual_effect.t = 0;
+			obj_target->visual_effect.t_max = 20;
+			obj_target->visual_effect.dir = dir;
+		}
 		if (event_visible)
 		{
 			log_text("A %s hit a %s.",
 				obj_type_name(obj_attacker->type), obj_type_name(obj_target->type));
 		}
 	}
-	obj_attacker->visual_effect.type = VISUAL_EFFECT_MOVE;
+	obj_attacker->visual_effect.type = VISUAL_EFFECT_ATTACK;
 	obj_attacker->visual_effect.t = 0;
-	obj_attacker->visual_effect.t_max = 6;
+	obj_attacker->visual_effect.t_max = 16;
 	obj_attacker->visual_effect.dir = dir;
 }
 
@@ -381,7 +391,7 @@ void obj_try_move(oid_t oid, tm_t move)
 	obj_t* obj = get_obj(oid);
 	obj->visual_effect.type = VISUAL_EFFECT_MOVE;
 	obj->visual_effect.t = 0;
-	obj->visual_effect.t_max = 8;
+	obj->visual_effect.t_max = 13;
 	obj->visual_effect.dir = tm_reverse(move);
 }
 
@@ -684,6 +694,7 @@ int main(void)
 			}
 
 			recompute_vision();
+			g_turn_number++;
 		}
 
 		/* Move the camera (smoothly) to keep the player centered. */
@@ -792,7 +803,7 @@ int main(void)
 				{
 					continue;
 				}
-				if (obj->visual_effect.t_max > 0)
+				if (obj->visual_effect.type != VISUAL_EFFECT_NONE)
 				{
 					if (obj->visual_effect.type == VISUAL_EFFECT_DAMAGED)
 					{
@@ -810,7 +821,8 @@ int main(void)
 							obj->visual_effect.t + 40, obj->visual_effect.t_max + 40,
 							src_rect.y, rect.y);
 					}
-					else if (obj->visual_effect.type == VISUAL_EFFECT_MOVE)
+					else if (obj->visual_effect.type == VISUAL_EFFECT_MOVE ||
+						obj->visual_effect.type == VISUAL_EFFECT_ATTACK)
 					{
 						tc_t src = tc_add_tm(tc, obj->visual_effect.dir);
 						SDL_Rect src_rect = {
@@ -827,7 +839,7 @@ int main(void)
 					obj->visual_effect.t++;
 					if (obj->visual_effect.t >= obj->visual_effect.t_max)
 					{
-						obj->visual_effect.t_max = 0;
+						obj->visual_effect = (visual_effect_t){0};
 					}
 				}
 			}
