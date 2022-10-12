@@ -45,6 +45,13 @@ rgb_t g_color_light_green = {40, 240, 90};
 rgb_t g_color_dark_green = {10, 160, 40};
 rgb_t g_color_cyan = {20, 200, 180};
 
+/* Screen coordinates. */
+struct sc_t
+{
+	int x, y;
+};
+typedef struct sc_t sc_t;
+
 SDL_Texture* text_to_texture(char const* text, rgba_t color)
 {
 	SDL_Color sdl_color = {color.r, color.g, color.b, color.a};
@@ -56,9 +63,18 @@ SDL_Texture* text_to_texture(char const* text, rgba_t color)
 	return texture;
 }
 
-void draw_text_stetch(char const* text, rgb_t color, SDL_Rect rect)
+void draw_text_rect(char const* text, rgba_t color, SDL_Rect rect)
 {
-	SDL_Texture* texture = text_to_texture(text, rgb_to_rgba(color, 255));
+	SDL_Texture* texture = text_to_texture(text, color);
+	SDL_RenderCopy(g_renderer, texture, NULL, &rect);
+	SDL_DestroyTexture(texture);
+}
+
+void draw_text_sc(char const* text, rgba_t color, sc_t sc)
+{
+	SDL_Texture* texture = text_to_texture(text, color);
+	SDL_Rect rect = {.x = sc.x, .y = sc.y};
+	SDL_QueryTexture(texture, NULL, NULL, &rect.w, &rect.h);
 	SDL_RenderCopy(g_renderer, texture, NULL, &rect);
 	SDL_DestroyTexture(texture);
 }
@@ -76,7 +92,8 @@ typedef struct log_entry_t log_entry_t;
 int g_log_len = 0, g_log_cap = 0;
 log_entry_t* g_log_da = NULL;
 
-void log_text(char* format, ...)
+/* Returns an allocated string. */
+char* format(char* format, ...)
 {
 	va_list va;
 	va_start(va, format);
@@ -86,6 +103,27 @@ void log_text(char* format, ...)
 	char* text = malloc(text_len + 1);
 	va_start(va, format);
 	vsnprintf(text, text_len + 1, format, va);
+	va_end(va);
+	return text;
+}
+
+char* vformat(char* format, va_list va)
+{
+	va_list va_2;
+	va_copy(va_2, va);
+	int text_len = vsnprintf(NULL, 0, format, va);
+	assert(text_len >= 0);
+	char* text = malloc(text_len + 1);
+	vsnprintf(text, text_len + 1, format, va_2);
+	va_end(va_2);
+	return text;
+}
+
+void log_text(char* format, ...)
+{
+	va_list va;
+	va_start(va, format);
+	char* text = vformat(format, va);
 	va_end(va);
 
 	DA_LENGTHEN(g_log_len += 1, g_log_cap, g_log_da, log_entry_t);
@@ -269,6 +307,12 @@ void recompute_vision(void)
 					case OBJ_CRYSTAL:
 						vision -= 4;
 					break;
+					case OBJ_SLIME:
+						vision -= 2;
+					break;
+					case OBJ_CATERPILLAR:
+						vision -= 1;
+					break;
 					default:
 						;
 					break;
@@ -302,10 +346,15 @@ char const* obj_type_name(obj_type_t type)
 			return "tree";
 		case OBJ_SLIME:
 			return "slime";
+		case OBJ_CATERPILLAR:
+			return "caterpillar";
 		default:
 			assert(false);
 	}
 }
+
+bool g_game_over = false;
+char* g_game_over_cause = NULL;
 
 void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 {
@@ -323,13 +372,18 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 	obj_target->life--;
 	if (obj_target->life <= 0)
 	{
-		obj_dealloc(oid_target);
-		recompute_vision();
 		if (event_visible)
 		{
 			log_text("A %s killed a %s.",
 				obj_type_name(obj_attacker->type), obj_type_name(obj_target->type));
 		}
+		if (obj_target->type == OBJ_PLAYER)
+		{
+			log_text("Game over.");
+			g_game_over = true;
+			g_game_over_cause = format("Killed by a %s.", obj_type_name(obj_attacker->type));
+		}
+		obj_dealloc(oid_target);
 	}
 	else
 	{
@@ -354,6 +408,7 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 
 void obj_try_move(oid_t oid, tm_t move)
 {
+	assert(get_obj(oid) != NULL);
 	tc_t dst_tc = tc_add_tm(loc_tc(get_obj(oid)->loc), move);
 	tile_t* dst_tile = mg_tile(dst_tc);
 	if (dst_tile == NULL)
@@ -377,6 +432,7 @@ void obj_try_move(oid_t oid, tm_t move)
 				return;
 			case OBJ_BUSH:
 			case OBJ_SLIME:
+			case OBJ_CATERPILLAR:
 			case OBJ_PLAYER:
 				obj_hits_obj(oid, oid_on_dst);
 				return;
@@ -600,11 +656,18 @@ int main(void)
 		if (!oid_da_contains_type(&tile->oid_da, OBJ_ROCK) &&
 			!oid_da_contains_type(&tile->oid_da, OBJ_TREE) &&
 			!oid_da_contains_type(&tile->oid_da, OBJ_CRYSTAL) &&
-			!oid_da_contains_type(&tile->oid_da, OBJ_PLAYER) &&
-			rand() % 20 == 0)
+			!oid_da_contains_type(&tile->oid_da, OBJ_PLAYER))
 		{
-			oid_t oid = obj_alloc(OBJ_SLIME, tc_to_loc(tc));
-			get_obj(oid)->life = 5;
+			if (rand() % 20 == 0)
+			{
+				oid_t oid = obj_alloc(OBJ_SLIME, tc_to_loc(tc));
+				get_obj(oid)->life = 5;
+			}
+			else if (rand() % 50 == 0)
+			{
+				oid_t oid = obj_alloc(OBJ_CATERPILLAR, tc_to_loc(tc));
+				get_obj(oid)->life = 6;
+			}
 		}
 	}
 
@@ -650,28 +713,25 @@ int main(void)
 							running = false;
 						break;
 						case SDLK_KP_PLUS:
-							g_tile_w += 5;
-							g_tile_h += 5;
-						break;
 						case SDLK_KP_MINUS:
-							g_tile_w -= 5;
-							g_tile_h -= 5;
+							g_tile_w += 5 * (event.key.keysym.sym == SDLK_KP_PLUS ? 1 : -1);
+							g_tile_h += 5 * (event.key.keysym.sym == SDLK_KP_PLUS ? 1 : -1);
 						break;
 						case SDLK_UP:
-							obj_try_move(g_player_oid, TM_UP);
-							perform_turn = true;
-						break;
 						case SDLK_RIGHT:
-							obj_try_move(g_player_oid, TM_RIGHT);
-							perform_turn = true;
-						break;
 						case SDLK_DOWN:
-							obj_try_move(g_player_oid, TM_DOWN);
-							perform_turn = true;
-						break;
 						case SDLK_LEFT:
-							obj_try_move(g_player_oid, TM_LEFT);
-							perform_turn = true;
+							if (!g_game_over)
+							{
+								tm_t dir =
+									event.key.keysym.sym == SDLK_UP ? TM_UP :
+									event.key.keysym.sym == SDLK_RIGHT ? TM_RIGHT :
+									event.key.keysym.sym == SDLK_DOWN ? TM_DOWN :
+									event.key.keysym.sym == SDLK_LEFT ? TM_LEFT :
+									(assert(false), (tm_t){0});
+								obj_try_move(g_player_oid, dir);
+								perform_turn = true;
+							}
 						break;
 					}
 				break;
@@ -691,10 +751,39 @@ int main(void)
 						obj_try_move(oid, rand_tm_one());
 					}
 				}
+				else if (obj->type == OBJ_CATERPILLAR)
+				{
+					for (int i = 0; i < 4; i++)
+					{
+						tm_t tm = TM_ONE_ALL[i];
+						tc_t dst_tc = tc_add_tm(loc_tc(obj->loc), tm);
+						tile_t* dst_tile = mg_tile(dst_tc);
+						if (dst_tile == NULL)
+						{
+							continue;
+						}
+						if (oid_da_contains_type(&dst_tile->oid_da, OBJ_PLAYER))
+						{
+							obj_try_move(oid, tm);
+							goto caterpillar_done;
+						}
+					}
+					obj_try_move(oid, rand_tm_one());
+					caterpillar_done:;
+				}
 			}
 
-			recompute_vision();
-			g_turn_number++;
+			if (!g_game_over && get_obj(g_player_oid)->life <= 0)
+			{
+				log_text("Game over.");
+				g_game_over = true;
+				g_game_over_cause = format("Killed by.. something?");
+			}
+			else
+			{
+				recompute_vision();
+				g_turn_number++;
+			}
 		}
 
 		/* Move the camera (smoothly) to keep the player centered. */
@@ -760,6 +849,11 @@ int main(void)
 			{
 				text = "o";
 				text_color = g_color_cyan;
+			}
+			else if (oid_da_contains_type(&tile->oid_da, OBJ_CATERPILLAR))
+			{
+				text = "~";
+				text_color = g_color_yellow;
 			}
 			else if (oid_da_contains_type(&tile->oid_da, OBJ_GRASS))
 			{
@@ -853,7 +947,20 @@ int main(void)
 			{
 				rect.y -= 5 + text_stretch;
 				rect.h += 10 + text_stretch + text_stretch / 3;
-				draw_text_stetch(text, text_color, rect);
+				draw_text_rect(text, rgb_to_rgba(text_color, 255), rect);
+			}
+		}
+
+		{
+			int y = 10;
+			char* text = format("HP: %d", get_obj(g_player_oid)->life);
+			draw_text_sc(text, rgb_to_rgba(g_color_white, 255), (sc_t){10, y});
+			free(text);
+			y += 30;
+			if (g_game_over)
+			{
+				draw_text_sc(g_game_over_cause, rgb_to_rgba(g_color_white, 255), (sc_t){10, y});
+				y += 30;
 			}
 		}
 

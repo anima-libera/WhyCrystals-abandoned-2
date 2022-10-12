@@ -27,6 +27,7 @@ enum obj_type_t
 	OBJ_MOSS,
 	OBJ_TREE,
 	OBJ_SLIME,
+	OBJ_CATERPILLAR,
 };
 typedef enum obj_type_t obj_type_t;
 
