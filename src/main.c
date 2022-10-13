@@ -12,10 +12,21 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 
+/* Time since the beginning of the game loop, in milliseconds. */
+int g_game_duration = 0;
+
 int g_window_w = 1200, g_window_h = 600;
 SDL_Window* g_window = NULL;
 SDL_Renderer* g_renderer = NULL;
-TTF_Font* g_font = NULL;
+
+enum font_t
+{
+	FONT_RG,
+	FONT_TL,
+	FONT_NUMBER
+};
+typedef enum font_t font_t;
+TTF_Font* g_font_table[FONT_NUMBER] = {0};
 
 struct rgb_t
 {
@@ -34,16 +45,16 @@ rgba_t rgb_to_rgba(rgb_t rgb, uint8_t alpha)
 	return (rgba_t){rgb.r, rgb.g, rgb.b, alpha};
 }
 
-rgb_t g_color_bg_shadow = {5, 30, 25};
-rgb_t g_color_bg = {10, 40, 35};
-rgb_t g_color_bg_bright = {20, 80, 70};
-rgb_t g_color_white = {180, 220, 200};
-rgb_t g_color_yellow = {230, 240, 40};
-rgb_t g_color_red = {230, 40, 35};
-rgb_t g_color_green = {10, 240, 45};
-rgb_t g_color_light_green = {40, 240, 90};
-rgb_t g_color_dark_green = {10, 160, 40};
-rgb_t g_color_cyan = {20, 200, 180};
+rgb_t g_color_bg_shadow =   {  5,  30,  25};
+rgb_t g_color_bg =          { 10,  40,  35};
+rgb_t g_color_bg_bright =   { 20,  80,  70};
+rgb_t g_color_white =       {180, 220, 200};
+rgb_t g_color_yellow =      {230, 240,  40};
+rgb_t g_color_red =         {230,  40,  35};
+rgb_t g_color_green =       { 10, 240,  45};
+rgb_t g_color_light_green = { 40, 240,  90};
+rgb_t g_color_dark_green =  { 10, 160,  40};
+rgb_t g_color_cyan =        { 20, 200, 180};
 
 /* Screen coordinates. */
 struct sc_t
@@ -52,10 +63,11 @@ struct sc_t
 };
 typedef struct sc_t sc_t;
 
-SDL_Texture* text_to_texture(char const* text, rgba_t color)
+SDL_Texture* text_to_texture(char const* text, rgba_t color, font_t font)
 {
+	assert(0 <= font && font < FONT_NUMBER);
 	SDL_Color sdl_color = {color.r, color.g, color.b, color.a};
-	SDL_Surface* surface = TTF_RenderText_Solid(g_font, text, sdl_color);
+	SDL_Surface* surface = TTF_RenderText_Solid(g_font_table[font], text, sdl_color);
 	assert(surface != NULL);
 	SDL_Texture* texture = SDL_CreateTextureFromSurface(g_renderer, surface);
 	assert(texture != NULL);
@@ -63,16 +75,16 @@ SDL_Texture* text_to_texture(char const* text, rgba_t color)
 	return texture;
 }
 
-void draw_text_rect(char const* text, rgba_t color, SDL_Rect rect)
+void draw_text_rect(char const* text, rgba_t color, font_t font, SDL_Rect rect)
 {
-	SDL_Texture* texture = text_to_texture(text, color);
+	SDL_Texture* texture = text_to_texture(text, color, font);
 	SDL_RenderCopy(g_renderer, texture, NULL, &rect);
 	SDL_DestroyTexture(texture);
 }
 
-void draw_text_sc(char const* text, rgba_t color, sc_t sc)
+void draw_text_sc(char const* text, rgba_t color, font_t font, sc_t sc)
 {
-	SDL_Texture* texture = text_to_texture(text, color);
+	SDL_Texture* texture = text_to_texture(text, color, font);
 	SDL_Rect rect = {.x = sc.x, .y = sc.y};
 	SDL_QueryTexture(texture, NULL, NULL, &rect.w, &rect.h);
 	SDL_RenderCopy(g_renderer, texture, NULL, &rect);
@@ -145,7 +157,7 @@ void draw_log(void)
 		int alpha = min(255, g_log_da[i].time_remaining * 6);
 
 		SDL_Texture* texture = text_to_texture(g_log_da[i].text,
-			rgb_to_rgba(g_color_white, 255));
+			rgb_to_rgba(g_color_white, 255), FONT_TL);
 		SDL_SetTextureAlphaMod(texture, alpha);
 		SDL_Rect rect = {.x = 10, .y = y};
 		SDL_QueryTexture(texture, NULL, NULL, &rect.w, &rect.h);
@@ -248,13 +260,29 @@ bool line_bresenham_iter(bresenham_it_t* it)
 	#undef LINE_BRESENHAM_ITER
 }
 
+int obj_type_vision_blocking(obj_type_t type)
+{
+	switch (type)
+	{
+		case OBJ_GRASS:       return 3;
+		case OBJ_BUSH:        return 4;
+		case OBJ_MOSS:        return 1;
+		case OBJ_TREE:        return 8;
+		case OBJ_ROCK:        return 100;
+		case OBJ_CRYSTAL:     return 4;
+		case OBJ_SLIME:       return 2;
+		case OBJ_CATERPILLAR: return 1;
+		default:              return 1;
+	}
+}
+
 void recompute_vision(void)
 {
 	for (int y = 0; y < g_mg_rect.h; y++)
 	for (int x = 0; x < g_mg_rect.w; x++)
 	{
 		tc_t tc = {x, y};
-		tile_t* tile = mg_tile(tc);
+		tile_t* tile = get_tile(tc);
 		tile->vision = 0;
 	}
 
@@ -264,7 +292,7 @@ void recompute_vision(void)
 	for (int x = 0; x < g_mg_rect.w; x++)
 	{
 		tc_t tc = {x, y};
-		tile_t* tile = mg_tile(tc);
+		tile_t* tile = get_tile(tc);
 		if (tile->vision != 0)
 		{
 			continue;
@@ -274,7 +302,7 @@ void recompute_vision(void)
 		bresenham_it_t it = line_bresenham_init(src_tc, tc);
 		while (line_bresenham_iter(&it))
 		{
-			tile_t* tile = mg_tile(it.head);
+			tile_t* tile = get_tile(it.head);
 			tile->vision = max(tile->vision, vision);
 			if (tc_eq(it.head, src_tc))
 			{
@@ -287,36 +315,7 @@ void recompute_vision(void)
 				{
 					continue;
 				}
-				switch (obj->type)
-				{
-					case OBJ_GRASS:
-						vision -= 3;
-					break;
-					case OBJ_BUSH:
-						vision -= 4;
-					break;
-					case OBJ_MOSS:
-						vision -= 1;
-					break;
-					case OBJ_TREE:
-						vision -= 8;
-					break;
-					case OBJ_ROCK:
-						vision -= 100;
-					break;
-					case OBJ_CRYSTAL:
-						vision -= 4;
-					break;
-					case OBJ_SLIME:
-						vision -= 2;
-					break;
-					case OBJ_CATERPILLAR:
-						vision -= 1;
-					break;
-					default:
-						;
-					break;
-				}
+				vision -= obj_type_vision_blocking(obj->type);
 			}
 			if (vision < 0)
 			{
@@ -330,26 +329,16 @@ char const* obj_type_name(obj_type_t type)
 {
 	switch (type)
 	{
-		case OBJ_PLAYER:
-			return "player";
-		case OBJ_CRYSTAL:
-			return "crystal";
-		case OBJ_ROCK:
-			return "rock";
-		case OBJ_GRASS:
-			return "grass";
-		case OBJ_BUSH:
-			return "bush";
-		case OBJ_MOSS:
-			return "moss";
-		case OBJ_TREE:
-			return "tree";
-		case OBJ_SLIME:
-			return "slime";
-		case OBJ_CATERPILLAR:
-			return "caterpillar";
-		default:
-			assert(false);
+		case OBJ_PLAYER:      return "player";
+		case OBJ_CRYSTAL:     return "crystal";
+		case OBJ_ROCK:        return "rock";
+		case OBJ_GRASS:       return "grass";
+		case OBJ_BUSH:        return "bush";
+		case OBJ_MOSS:        return "moss";
+		case OBJ_TREE:        return "tree";
+		case OBJ_SLIME:       return "slime";
+		case OBJ_CATERPILLAR: return "caterpillar";
+		default:              assert(false); exit(EXIT_FAILURE);
 	}
 }
 
@@ -367,7 +356,7 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 	tc_t tc_attacker = loc_tc(obj_attacker->loc);
 	tc_t tc_target = loc_tc(obj_target->loc);
 	tm_t dir = tc_diff_as_tm(tc_attacker, tc_target);
-	bool event_visible = mg_tile(tc_attacker)->vision > 0 || mg_tile(tc_target)->vision > 0;
+	bool event_visible = get_tile(tc_attacker)->vision > 0 || get_tile(tc_target)->vision > 0;
 	
 	obj_target->life--;
 	if (obj_target->life <= 0)
@@ -390,8 +379,8 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 		if (obj_target->visual_effect.type != VISUAL_EFFECT_ATTACK)
 		{
 			obj_target->visual_effect.type = VISUAL_EFFECT_DAMAGED;
-			obj_target->visual_effect.t = 0;
-			obj_target->visual_effect.t_max = 20;
+			obj_target->visual_effect.t_begin = g_game_duration;
+			obj_target->visual_effect.t_end = g_game_duration + 100;
 			obj_target->visual_effect.dir = dir;
 		}
 		if (event_visible)
@@ -401,16 +390,54 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 		}
 	}
 	obj_attacker->visual_effect.type = VISUAL_EFFECT_ATTACK;
-	obj_attacker->visual_effect.t = 0;
-	obj_attacker->visual_effect.t_max = 16;
+	obj_attacker->visual_effect.t_begin = g_game_duration;
+	obj_attacker->visual_effect.t_end = g_game_duration + 80;
 	obj_attacker->visual_effect.dir = dir;
+}
+
+bool obj_type_is_blocking(obj_type_t type)
+{
+	switch (type)
+	{
+		case OBJ_TREE:
+		case OBJ_ROCK:
+		case OBJ_CRYSTAL:
+		case OBJ_BUSH:
+		case OBJ_SLIME:
+		case OBJ_CATERPILLAR:
+		case OBJ_PLAYER:
+			return true;
+		case OBJ_GRASS:
+		case OBJ_MOSS:
+		default:
+			return false;
+	}
+}
+
+bool obj_type_can_get_hit_for_now(obj_type_t type)
+{
+	switch (type)
+	{
+		case OBJ_BUSH:
+		case OBJ_SLIME:
+		case OBJ_CATERPILLAR:
+		case OBJ_PLAYER:
+			return true;
+		case OBJ_TREE:
+		case OBJ_ROCK:
+		case OBJ_CRYSTAL:
+		case OBJ_GRASS:
+		case OBJ_MOSS:
+		default:
+			return false;
+	}
 }
 
 void obj_try_move(oid_t oid, tm_t move)
 {
 	assert(get_obj(oid) != NULL);
 	tc_t dst_tc = tc_add_tm(loc_tc(get_obj(oid)->loc), move);
-	tile_t* dst_tile = mg_tile(dst_tc);
+	tile_t* dst_tile = get_tile(dst_tc);
 	if (dst_tile == NULL)
 	{
 		return;
@@ -424,21 +451,14 @@ void obj_try_move(oid_t oid, tm_t move)
 		{
 			continue;
 		}
-		switch (obj_on_dst->type)
+		else if (obj_type_can_get_hit_for_now(obj_on_dst->type))
 		{
-			case OBJ_ROCK:
-			case OBJ_CRYSTAL:
-			case OBJ_TREE:
-				return;
-			case OBJ_BUSH:
-			case OBJ_SLIME:
-			case OBJ_CATERPILLAR:
-			case OBJ_PLAYER:
-				obj_hits_obj(oid, oid_on_dst);
-				return;
-			default:
-				;
-			break;
+			obj_hits_obj(oid, oid_on_dst);
+			return;
+		}
+		else if (obj_type_is_blocking(obj_on_dst->type))
+		{
+			return;
 		}
 	}
 
@@ -446,60 +466,13 @@ void obj_try_move(oid_t oid, tm_t move)
 
 	obj_t* obj = get_obj(oid);
 	obj->visual_effect.type = VISUAL_EFFECT_MOVE;
-	obj->visual_effect.t = 0;
-	obj->visual_effect.t_max = 13;
+	obj->visual_effect.t_begin = g_game_duration;
+	obj->visual_effect.t_end = g_game_duration + 60;
 	obj->visual_effect.dir = tm_reverse(move);
 }
 
-int interpolate(int progression, int progression_max, int value_min, int value_max)
+void generate_map(void)
 {
-	return
-		(value_min * (progression_max - progression) + progression * value_max)
-		/ progression_max;
-}
-
-int main(void)
-{
-	srand(time(NULL));
-
-	if (SDL_Init(SDL_INIT_VIDEO) != 0)
-	{
-		assert(false);
-	}
-
-	g_window = SDL_CreateWindow("Why Crystals ?",
-		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, g_window_w, g_window_h,
-		SDL_WINDOW_RESIZABLE);
-	assert(g_window != NULL);
-
-	g_renderer = SDL_CreateRenderer(g_window, -1,
-		SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE);
-	assert(g_renderer != NULL);
-
-	if (TTF_Init() < 0)
-	{
-		assert(false);
-	}
-
-	SDL_RWops* rwops_font = SDL_RWFromConstMem(
-		g_asset_font,
-		g_asset_font_size);
-	assert(rwops_font != NULL);
-	g_font = TTF_OpenFontRW(rwops_font, 0, 20);
-	assert(g_font != NULL);
-
-	g_mg_rect.w = 60;
-	g_mg_rect.h = 60;
-	g_mg = malloc(g_mg_rect.w * g_mg_rect.h * sizeof(tile_t));
-
-	for (int y = 0; y < g_mg_rect.h; y++)
-	for (int x = 0; x < g_mg_rect.w; x++)
-	{
-		tc_t tc = {x, y};
-		tile_t* tile = mg_tile(tc);
-		*tile = (tile_t){0};
-	}
-
 	tc_t crystal_tc = {
 		.x = g_mg_rect.x + g_mg_rect.w / 4 + rand() % (g_mg_rect.w / 9),
 		.y = g_mg_rect.y + g_mg_rect.h / 3 + rand() % (g_mg_rect.h / 3)};
@@ -521,7 +494,7 @@ int main(void)
 		int same_direction_steps = 0;
 		while (tc_in_rect(tc, path_rect))
 		{
-			tile_t* tile = mg_tile(tc);
+			tile_t* tile = get_tile(tc);
 			tile->is_path = true;
 			if (tc.x == g_mg_rect.w-1)
 			{
@@ -548,7 +521,7 @@ int main(void)
 		for (int x = 0; x < g_mg_rect.w; x++)
 		{
 			tc_t tc = {x, y};
-			tile_t* tile = mg_tile(tc);
+			tile_t* tile = get_tile(tc);
 			if (tile->is_path)
 			{
 				/* Making sure that the path only has straight lines and turns
@@ -557,7 +530,7 @@ int main(void)
 				for (int i = 0; i < 4; i++)
 				{
 					tc_t neighbor_tc = tc_add_tm(tc, TM_ONE_ALL[i]);
-					tile_t* neighbor_tile = mg_tile(neighbor_tc);
+					tile_t* neighbor_tile = get_tile(neighbor_tc);
 					if (neighbor_tile != NULL && neighbor_tile->is_path)
 					{
 						neighbor_path_count++;
@@ -574,7 +547,7 @@ int main(void)
 		for (int y = 0; y < g_mg_rect.h; y++)
 		{
 			tc_t tc = {g_mg_rect.w-1, y};
-			tile_t* tile = mg_tile(tc);
+			tile_t* tile = get_tile(tc);
 			if (tile->is_path)
 			{
 				path_touches_right_edge = true;
@@ -596,7 +569,7 @@ int main(void)
 		for (int x = 0; x < g_mg_rect.w; x++)
 		{
 			tc_t tc = {x, y};
-			tile_t* tile = mg_tile(tc);
+			tile_t* tile = get_tile(tc);
 			tile->is_path = false;
 		}
 	}
@@ -606,7 +579,7 @@ int main(void)
 	for (int x = 0; x < g_mg_rect.w; x++)
 	{
 		tc_t tc = {x, y};
-		tile_t* tile = mg_tile(tc);
+		tile_t* tile = get_tile(tc);
 
 		if (tile->is_path)
 		{
@@ -616,7 +589,7 @@ int main(void)
 		bool neighbor_to_path = false;
 		for (int i = 0; i < 4; i++)
 		{
-			tile_t* neighbor_tile = mg_tile(tc_add_tm(tc, TM_ONE_ALL[i]));
+			tile_t* neighbor_tile = get_tile(tc_add_tm(tc, TM_ONE_ALL[i]));
 			if (neighbor_tile != NULL && neighbor_tile->is_path)
 			{
 				neighbor_to_path = true;
@@ -655,8 +628,7 @@ int main(void)
 
 		if (!oid_da_contains_type(&tile->oid_da, OBJ_ROCK) &&
 			!oid_da_contains_type(&tile->oid_da, OBJ_TREE) &&
-			!oid_da_contains_type(&tile->oid_da, OBJ_CRYSTAL) &&
-			!oid_da_contains_type(&tile->oid_da, OBJ_PLAYER))
+			!oid_da_contains_type(&tile->oid_da, OBJ_CRYSTAL))
 		{
 			if (rand() % 20 == 0)
 			{
@@ -670,10 +642,74 @@ int main(void)
 			}
 		}
 	}
+}
 
-	tc_t player_tc = {g_mg_rect.w / 2, g_mg_rect.h / 2};
-	g_player_oid = obj_alloc(OBJ_PLAYER, tc_to_loc(player_tc));
-	get_obj(g_player_oid)->life = 10;
+int main(void)
+{
+	srand(time(NULL));
+
+	if (SDL_Init(SDL_INIT_VIDEO) != 0)
+	{
+		assert(false);
+	}
+
+	g_window = SDL_CreateWindow("Why Crystals ?",
+		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, g_window_w, g_window_h,
+		SDL_WINDOW_RESIZABLE);
+	assert(g_window != NULL);
+
+	g_renderer = SDL_CreateRenderer(g_window, -1,
+		SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE);
+	assert(g_renderer != NULL);
+
+	if (TTF_Init() < 0)
+	{
+		assert(false);
+	}
+
+	SDL_RWops* rwops_font = SDL_RWFromConstMem(
+		g_asset_font_1,
+		g_asset_font_1_size);
+	assert(rwops_font != NULL);
+	g_font_table[0] = TTF_OpenFontRW(rwops_font, 0, 20);
+	assert(g_font_table[0] != NULL);
+
+	rwops_font = SDL_RWFromConstMem(
+		g_asset_font_2,
+		g_asset_font_2_size);
+	assert(rwops_font != NULL);
+	g_font_table[1] = TTF_OpenFontRW(rwops_font, 0, 30);
+	assert(g_font_table[1] != NULL);
+
+	g_mg_rect.w = 60;
+	g_mg_rect.h = 60;
+	g_mg = malloc(g_mg_rect.w * g_mg_rect.h * sizeof(tile_t));
+
+	for (int y = 0; y < g_mg_rect.h; y++)
+	for (int x = 0; x < g_mg_rect.w; x++)
+	{
+		tc_t tc = {x, y};
+		tile_t* tile = get_tile(tc);
+		*tile = (tile_t){0};
+	}
+
+	generate_map();
+
+	{
+		/* Place the player on a tile that does not contains blocking objects. */
+		tc_t tc = {g_mg_rect.w / 2, g_mg_rect.h / 2};
+		while (oid_da_contains_type_f(&get_tile(tc)->oid_da, obj_type_is_blocking))
+		{
+			tc_t new_tc = tc_add_tm(tc, rand_tm_one());
+			while (get_tile(new_tc) == NULL)
+			{
+				new_tc = tc_add_tm(tc, rand_tm_one());
+			}
+			tc = new_tc;
+		}
+		g_player_oid = obj_alloc(OBJ_PLAYER, tc_to_loc(tc));
+		get_obj(g_player_oid)->life = 10;
+	}
 
 	recompute_vision();
 	
@@ -681,12 +717,17 @@ int main(void)
 	camera_x = ((float)g_mg_rect.w / 2.0f) * (float)g_tile_w + 0.5f * (float)g_tile_w;
 	camera_y = ((float)g_mg_rect.h / 2.0f) * (float)g_tile_h + 0.5f * (float)g_tile_h;
 
-	float iteration_time = 0.0f;
+	int obj_count = 0;
+
+	int start_loop_time = SDL_GetTicks();
+	g_game_duration = 0;
+	int iteration_duration = 0; /* In milliseconds. */
 
 	bool running = true;
 	while (running)
 	{
-		clock_t clock_start_loop = clock();
+		int start_iteration_time = SDL_GetTicks();
+		g_game_duration = start_iteration_time - start_loop_time;
 
 		bool perform_turn = false;
 
@@ -740,10 +781,13 @@ int main(void)
 
 		if (perform_turn)
 		{
+			obj_count = 0;
 			oid_t oid = OID_NULL;
 			while (oid_iter(&oid))
 			{
+				obj_count++;
 				obj_t* obj = get_obj(oid);
+
 				if (obj->type == OBJ_SLIME)
 				{
 					if (rand() % 3 == 0)
@@ -757,7 +801,7 @@ int main(void)
 					{
 						tm_t tm = TM_ONE_ALL[i];
 						tc_t dst_tc = tc_add_tm(loc_tc(obj->loc), tm);
-						tile_t* dst_tile = mg_tile(dst_tc);
+						tile_t* dst_tile = get_tile(dst_tc);
 						if (dst_tile == NULL)
 						{
 							continue;
@@ -813,11 +857,12 @@ int main(void)
 				g_tile_w, g_tile_h};
 			SDL_Rect rect = {base_rect.x, base_rect.y, base_rect.w, base_rect.h};
 
-			tile_t const* tile = mg_tile(tc);
+			tile_t const* tile = get_tile(tc);
 
 			char* text = " ";
 			int text_stretch = 0;
 			rgb_t text_color = g_color_white;
+			font_t text_font = FONT_RG;
 			rgb_t bg_color = g_color_bg;
 			if (oid_da_contains_type(&tile->oid_da, OBJ_PLAYER))
 			{
@@ -899,6 +944,14 @@ int main(void)
 				}
 				if (obj->visual_effect.type != VISUAL_EFFECT_NONE)
 				{
+					int t = g_game_duration - obj->visual_effect.t_begin;
+					int t_max = obj->visual_effect.t_end - obj->visual_effect.t_begin;
+					if (t > t_max)
+					{
+						obj->visual_effect = (visual_effect_t){0};
+						continue;
+					}
+
 					if (obj->visual_effect.type == VISUAL_EFFECT_DAMAGED)
 					{
 						text_color = g_color_red;
@@ -908,12 +961,8 @@ int main(void)
 							src.x * g_tile_w + g_window_w / 2 - (int)camera_x,
 							src.y * g_tile_h + g_window_h / 2 - (int)camera_y,
 							g_tile_w, g_tile_h};
-						rect.x = interpolate(
-							obj->visual_effect.t + 40, obj->visual_effect.t_max + 40,
-							src_rect.x, rect.x);
-						rect.y = interpolate(
-							obj->visual_effect.t + 40, obj->visual_effect.t_max + 40,
-							src_rect.y, rect.y);
+						rect.x = interpolate(t + 40, t_max + 40, src_rect.x, rect.x);
+						rect.y = interpolate(t + 40, t_max + 40, src_rect.y, rect.y);
 					}
 					else if (obj->visual_effect.type == VISUAL_EFFECT_MOVE ||
 						obj->visual_effect.type == VISUAL_EFFECT_ATTACK)
@@ -923,17 +972,8 @@ int main(void)
 							src.x * g_tile_w + g_window_w / 2 - (int)camera_x,
 							src.y * g_tile_h + g_window_h / 2 - (int)camera_y,
 							g_tile_w, g_tile_h};
-						rect.x = interpolate(
-							obj->visual_effect.t, obj->visual_effect.t_max,
-							src_rect.x, rect.x);
-						rect.y = interpolate(
-							obj->visual_effect.t, obj->visual_effect.t_max,
-							src_rect.y, rect.y);
-					}
-					obj->visual_effect.t++;
-					if (obj->visual_effect.t >= obj->visual_effect.t_max)
-					{
-						obj->visual_effect = (visual_effect_t){0};
+						rect.x = interpolate(t, t_max, src_rect.x, rect.x);
+						rect.y = interpolate(t, t_max, src_rect.y, rect.y);
 					}
 				}
 			}
@@ -947,36 +987,61 @@ int main(void)
 			{
 				rect.y -= 5 + text_stretch;
 				rect.h += 10 + text_stretch + text_stretch / 3;
-				draw_text_rect(text, rgb_to_rgba(text_color, 255), rect);
+				draw_text_rect(text, rgb_to_rgba(text_color, 255), text_font, rect);
 			}
 		}
 
+		/* Display some information in a corner. */
 		{
 			int y = 10;
-			char* text = format("HP: %d", get_obj(g_player_oid)->life);
-			draw_text_sc(text, rgb_to_rgba(g_color_white, 255), (sc_t){10, y});
-			free(text);
-			y += 30;
+
+			{
+				char* text = format("HP: %d", get_obj(g_player_oid)->life);
+				draw_text_sc(text,
+					rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
+				free(text);
+				y += 30;
+			}
+
 			if (g_game_over)
 			{
-				draw_text_sc(g_game_over_cause, rgb_to_rgba(g_color_white, 255), (sc_t){10, y});
+				draw_text_sc(g_game_over_cause,
+					rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
+				y += 30;
+			}
+			
+			{
+				char* text = format("FPS: %.0f",
+					iteration_duration > 0.0f ?  1.0f / iteration_duration : 0.0f);
+				draw_text_sc(text,
+					rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
+				free(text);
+				y += 30;
+			}
+
+			{
+				char* text = format("Time: %.1f s", (float)g_game_duration / 1000.0f);
+				draw_text_sc(text,
+					rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
+				free(text);
+				y += 30;
+			}
+
+			{
+				char* text = format("Obj count: %d", obj_count);
+				draw_text_sc(text,
+					rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
+				free(text);
 				y += 30;
 			}
 		}
 
 		draw_log();
 
-		{
-			SDL_Rect rect = {0, g_window_h - 5, iteration_time * g_window_w, 5};
-			SDL_SetRenderDrawColor(g_renderer,
-				g_color_white.r, g_color_white.g, g_color_white.b, 255);
-			SDL_RenderFillRect(g_renderer, &rect);
-		}
-
 		SDL_RenderPresent(g_renderer);
 
-		clock_t clock_end_loop = clock();
-		iteration_time = (float)(clock_end_loop - clock_start_loop) / (float)CLOCKS_PER_SEC;
+		int end_iteration_time = SDL_GetTicks();
+		iteration_duration = end_iteration_time - start_iteration_time;
 	}
 
 	TTF_Quit();

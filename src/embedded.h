@@ -17,7 +17,10 @@
 #define BINARY /* Escapes the file content as an array of bytes. */
 #define SIZE /* Just produces the size in bytes of the file content, as an integer literal. */
 
-EMBEDDED("../assets/Retro Gaming.ttf", BINARY) unsigned char const g_asset_font[];
-EMBEDDED("../assets/Retro Gaming.ttf", SIZE) unsigned int const g_asset_font_size;
+EMBEDDED("../assets/Retro Gaming/Retro Gaming.ttf", BINARY) unsigned char const g_asset_font_1[];
+EMBEDDED("../assets/Retro Gaming/Retro Gaming.ttf", SIZE) unsigned int const g_asset_font_1_size;
+
+EMBEDDED("../assets/Thintel/Thintel.ttf", BINARY) unsigned char const g_asset_font_2[];
+EMBEDDED("../assets/Thintel/Thintel.ttf", SIZE) unsigned int const g_asset_font_2_size;
 
 #endif /* WHYCRYSTALS_HEADER_EMBEDDED_ */

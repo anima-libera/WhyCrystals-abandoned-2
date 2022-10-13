@@ -14,7 +14,7 @@ struct tile_t
 };
 typedef struct tile_t tile_t;
 
-tile_t* mg_tile(tc_t tc);
+tile_t* get_tile(tc_t tc);
 
 /* Map grid. */
 extern tile_t* g_mg;

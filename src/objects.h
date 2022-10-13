@@ -76,6 +76,7 @@ void oid_da_remove(oid_da_t* da, oid_t oid);
 
 oid_t oid_da_find_type(oid_da_t const* da, obj_type_t type);
 bool oid_da_contains_type(oid_da_t const* da, obj_type_t type);
+bool oid_da_contains_type_f(oid_da_t const* da, bool (*f)(obj_type_t type));
 
 extern oid_t g_crystal_oid;
 extern oid_t g_player_oid;
@@ -92,8 +93,8 @@ typedef enum visual_effect_type_t visual_effect_type_t;
 /* TODO: Make this better. */
 struct visual_effect_t
 {
-	int t;
-	int t_max;
+	int t_begin;
+	int t_end;
 	visual_effect_type_t type;
 	tm_t dir;
 };

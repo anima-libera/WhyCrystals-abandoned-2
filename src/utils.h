@@ -58,4 +58,13 @@ inline int cool_mod(int a, int b)
 	}
 }
 
+/* Returns a value that is between `value_min` and `value_max` the same way that
+ * `progression` is between `0` and `progression_max`. */
+inline int interpolate(int progression, int progression_max, int value_min, int value_max)
+{
+	return
+		(value_min * (progression_max - progression) + progression * value_max)
+		/ progression_max;
+}
+
 #endif /* WHYCRYSTALS_HEADER_UTILS_ */

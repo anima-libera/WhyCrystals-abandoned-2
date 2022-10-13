@@ -58,7 +58,7 @@ oid_t obj_alloc(obj_type_t type, loc_t loc)
 	entry->generation++;
 
 	oid_t oid = {.index = index, .generation = entry->generation};
-	oid_da_add(&mg_tile(loc_tc(loc))->oid_da, oid);
+	oid_da_add(&get_tile(loc_tc(loc))->oid_da, oid);
 	return oid;
 }
 
@@ -79,6 +79,9 @@ void assert_oid_makes_sens(oid_t oid)
 		 * wanting to destroy an object that was not yet created.
 		 * This happens either if there is a bug in the `g_obj_da` handling code or if
 		 * the given oid is corrupted. */);
+	#ifndef DEBUG
+		(void)entry;
+	#endif
 }
 
 void obj_dealloc(oid_t oid)
@@ -89,7 +92,7 @@ void obj_dealloc(oid_t oid)
 	if (entry->generation == oid.generation)
 	{
 		entry->exists = false;
-		oid_da_remove(&mg_tile(loc_tc(entry->obj->loc))->oid_da, oid);
+		oid_da_remove(&get_tile(loc_tc(entry->obj->loc))->oid_da, oid);
 	}
 	else
 	{
@@ -117,8 +120,8 @@ obj_t* get_obj(oid_t oid)
 void obj_move(oid_t oid, tc_t dst_tc)
 {
 	obj_t* obj = get_obj(oid);
-	tile_t* src_tile = mg_tile(loc_tc(obj->loc));
-	tile_t* dst_tile = mg_tile(dst_tc);
+	tile_t* src_tile = get_tile(loc_tc(obj->loc));
+	tile_t* dst_tile = get_tile(dst_tc);
 	oid_da_remove(&src_tile->oid_da, oid);
 	oid_da_add(&dst_tile->oid_da, oid);
 	obj->loc = tc_to_loc(dst_tc);
@@ -167,6 +170,19 @@ oid_t oid_da_find_type(oid_da_t const* da, obj_type_t type)
 bool oid_da_contains_type(oid_da_t const* da, obj_type_t type)
 {
 	return !oid_eq(oid_da_find_type(da, type), OID_NULL);
+}
+
+bool oid_da_contains_type_f(oid_da_t const* da, bool (*f)(obj_type_t type))
+{
+	for (int i = 0; i < da->len; i++)
+	{
+		obj_t* obj = get_obj(da->arr[i]);
+		if (obj != NULL && f(obj->type))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 oid_t g_crystal_oid = {0};

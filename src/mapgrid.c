@@ -2,7 +2,7 @@
 #include "mapgrid.h"
 #include <stdlib.h>
 
-tile_t* mg_tile(tc_t tc)
+tile_t* get_tile(tc_t tc)
 {
 	if (tc_in_rect(tc, g_mg_rect))
 	{
