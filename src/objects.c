@@ -188,6 +188,29 @@ bool oid_da_contains_type_f(oid_da_t const* da, bool (*f)(obj_type_t type))
 oid_t g_crystal_oid = {0};
 oid_t g_player_oid = {0};
 
+void visual_effect_da_add(visual_effect_da_t* da, visual_effect_t visual_effect)
+{
+	DA_LENGTHEN(da->len += 1, da->cap, da->arr, visual_effect_t);
+	da->arr[da->len-1] = visual_effect;
+}
+
+void visual_effect_da_remove(visual_effect_da_t* da, int index)
+{
+	assert(0 <= index && index < da->len);
+	da->arr[index].type = VISUAL_EFFECT_NONE;
+
+	/* If all the effects are "NONE" (i.e. nothing), then we can just free the list. */
+	for (int i = 0; i < da->len; i++)
+	{
+		if (da->arr[i].type != VISUAL_EFFECT_NONE)
+		{
+			return;
+		}
+	}
+	free(da->arr);
+	*da = (visual_effect_da_t){0};
+}
+
 bool oid_iter(oid_t* oid)
 {
 	assert(oid != NULL);

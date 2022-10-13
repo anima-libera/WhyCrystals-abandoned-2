@@ -90,7 +90,7 @@ enum visual_effect_type_t
 };
 typedef enum visual_effect_type_t visual_effect_type_t;
 
-/* TODO: Make this better. */
+/* TODO: Make this better or something ? */
 struct visual_effect_t
 {
 	int t_begin;
@@ -99,6 +99,16 @@ struct visual_effect_t
 	tm_t dir;
 };
 typedef struct visual_effect_t visual_effect_t;
+
+struct visual_effect_da_t
+{
+	visual_effect_t* arr;
+	int len, cap;
+};
+typedef struct visual_effect_da_t visual_effect_da_t;
+
+void visual_effect_da_add(visual_effect_da_t* da, visual_effect_t visual_effect);
+void visual_effect_da_remove(visual_effect_da_t* da, int index);
 
 /* Object.
  * Pretty much everything that physically exists
@@ -110,7 +120,7 @@ struct obj_t
 
 	int life;
 
-	visual_effect_t visual_effect;
+	visual_effect_da_t visual_effect_da;
 };
 typedef struct obj_t obj_t;
 

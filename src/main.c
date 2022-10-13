@@ -376,23 +376,22 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 	}
 	else
 	{
-		if (obj_target->visual_effect.type != VISUAL_EFFECT_ATTACK)
-		{
-			obj_target->visual_effect.type = VISUAL_EFFECT_DAMAGED;
-			obj_target->visual_effect.t_begin = g_game_duration;
-			obj_target->visual_effect.t_end = g_game_duration + 100;
-			obj_target->visual_effect.dir = dir;
-		}
+		visual_effect_da_add(&obj_target->visual_effect_da, (visual_effect_t){
+			.type = VISUAL_EFFECT_DAMAGED,
+			.t_begin = g_game_duration,
+			.t_end = g_game_duration + 100,
+			.dir = dir});
 		if (event_visible)
 		{
 			log_text("A %s hit a %s.",
 				obj_type_name(obj_attacker->type), obj_type_name(obj_target->type));
 		}
 	}
-	obj_attacker->visual_effect.type = VISUAL_EFFECT_ATTACK;
-	obj_attacker->visual_effect.t_begin = g_game_duration;
-	obj_attacker->visual_effect.t_end = g_game_duration + 80;
-	obj_attacker->visual_effect.dir = dir;
+	visual_effect_da_add(&obj_attacker->visual_effect_da, (visual_effect_t){
+		.type = VISUAL_EFFECT_ATTACK,
+		.t_begin = g_game_duration,
+		.t_end = g_game_duration + 80,
+		.dir = dir});
 }
 
 bool obj_type_is_blocking(obj_type_t type)
@@ -464,11 +463,11 @@ void obj_try_move(oid_t oid, tm_t move)
 
 	obj_move(oid, dst_tc);
 
-	obj_t* obj = get_obj(oid);
-	obj->visual_effect.type = VISUAL_EFFECT_MOVE;
-	obj->visual_effect.t_begin = g_game_duration;
-	obj->visual_effect.t_end = g_game_duration + 60;
-	obj->visual_effect.dir = tm_reverse(move);
+	visual_effect_da_add(&get_obj(oid)->visual_effect_da, (visual_effect_t){
+		.type = VISUAL_EFFECT_MOVE,
+		.t_begin = g_game_duration,
+		.t_end = g_game_duration + 60,
+		.dir = tm_reverse(move)});
 }
 
 void generate_map(void)
@@ -935,45 +934,53 @@ int main(void)
 				continue;
 			}
 
-			for (int i = 0; i < tile->oid_da.len; i++)
+			for (int i_obj = 0; i_obj < tile->oid_da.len; i_obj++)
 			{
-				obj_t* obj = get_obj(tile->oid_da.arr[i]);
+				obj_t* obj = get_obj(tile->oid_da.arr[i_obj]);
 				if (obj == NULL)
 				{
 					continue;
 				}
-				if (obj->visual_effect.type != VISUAL_EFFECT_NONE)
+				for (int i = 0; i < obj->visual_effect_da.len; i++)
 				{
-					int t = g_game_duration - obj->visual_effect.t_begin;
-					int t_max = obj->visual_effect.t_end - obj->visual_effect.t_begin;
-					if (t > t_max)
+					visual_effect_t* ve = &obj->visual_effect_da.arr[i];
+					if (g_game_duration > ve->t_end)
 					{
-						obj->visual_effect = (visual_effect_t){0};
+						visual_effect_da_remove(&obj->visual_effect_da, i);
 						continue;
 					}
-
-					if (obj->visual_effect.type == VISUAL_EFFECT_DAMAGED)
+					if (ve->type == VISUAL_EFFECT_NONE)
 					{
-						text_color = g_color_red;
-
-						tc_t src = tc_add_tm(tc, obj->visual_effect.dir);
-						SDL_Rect src_rect = {
-							src.x * g_tile_w + g_window_w / 2 - (int)camera_x,
-							src.y * g_tile_h + g_window_h / 2 - (int)camera_y,
-							g_tile_w, g_tile_h};
-						rect.x = interpolate(t + 40, t_max + 40, src_rect.x, rect.x);
-						rect.y = interpolate(t + 40, t_max + 40, src_rect.y, rect.y);
+						continue;
 					}
-					else if (obj->visual_effect.type == VISUAL_EFFECT_MOVE ||
-						obj->visual_effect.type == VISUAL_EFFECT_ATTACK)
+					if (ve->type != VISUAL_EFFECT_NONE)
 					{
-						tc_t src = tc_add_tm(tc, obj->visual_effect.dir);
-						SDL_Rect src_rect = {
-							src.x * g_tile_w + g_window_w / 2 - (int)camera_x,
-							src.y * g_tile_h + g_window_h / 2 - (int)camera_y,
-							g_tile_w, g_tile_h};
-						rect.x = interpolate(t, t_max, src_rect.x, rect.x);
-						rect.y = interpolate(t, t_max, src_rect.y, rect.y);
+						int t = g_game_duration - ve->t_begin;
+						int t_max = ve->t_end - ve->t_begin;
+
+						if (ve->type == VISUAL_EFFECT_DAMAGED)
+						{
+							text_color = g_color_red;
+
+							tc_t src = tc_add_tm(tc, ve->dir);
+							SDL_Rect src_rect = {
+								src.x * g_tile_w + g_window_w / 2 - (int)camera_x,
+								src.y * g_tile_h + g_window_h / 2 - (int)camera_y,
+								g_tile_w, g_tile_h};
+							rect.x = interpolate(t + 40, t_max + 40, src_rect.x, rect.x);
+							rect.y = interpolate(t + 40, t_max + 40, src_rect.y, rect.y);
+						}
+						else if (ve->type == VISUAL_EFFECT_MOVE ||
+							ve->type == VISUAL_EFFECT_ATTACK)
+						{
+							tc_t src = tc_add_tm(tc, ve->dir);
+							SDL_Rect src_rect = {
+								src.x * g_tile_w + g_window_w / 2 - (int)camera_x,
+								src.y * g_tile_h + g_window_h / 2 - (int)camera_y,
+								g_tile_w, g_tile_h};
+							rect.x = interpolate(t, t_max, src_rect.x, rect.x);
+							rect.y = interpolate(t, t_max, src_rect.y, rect.y);
+						}
 					}
 				}
 			}
