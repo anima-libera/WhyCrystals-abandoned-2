@@ -7,12 +7,27 @@
 
 tc_t loc_tc(loc_t loc)
 {
-	return loc.tc;
+	switch (loc.type)
+	{
+		case LOC_ON_TILE:
+			return loc.on_tile_tc;
+		case LOC_IN_OBJ:
+			assert(get_obj(loc.in_obj_oid) != NULL);
+			return loc_tc(get_obj(loc.in_obj_oid)->loc);
+		default:
+			assert(false); exit(EXIT_FAILURE);
+	}
 }
 
 loc_t tc_to_loc(tc_t tc)
 {
-	return (loc_t){.tc = tc};
+	return (loc_t){.type = LOC_ON_TILE, .on_tile_tc = tc};
+}
+
+loc_t in_obj_loc(oid_t container_oid)
+{
+	assert(get_obj(container_oid) != NULL);
+	return (loc_t){.type = LOC_IN_OBJ, .in_obj_oid = container_oid};
 }
 
 struct obj_entry_t
@@ -33,7 +48,45 @@ bool oid_eq(oid_t oid_a, oid_t oid_b)
 	return oid_a.index == oid_b.index && oid_a.generation == oid_b.generation;
 }
 
-oid_t obj_alloc(obj_type_t type, loc_t loc)
+static void obj_set_loc(oid_t oid, loc_t loc)
+{
+	obj_t* obj = get_obj(oid);
+	assert(obj != NULL);
+	switch (loc.type)
+	{
+		case LOC_ON_TILE:
+			oid_da_add(&get_tile(loc_tc(loc))->oid_da, oid);
+			obj->loc = loc;
+		break;
+		case LOC_IN_OBJ:
+			oid_da_add(&get_obj(loc.in_obj_oid)->contained_da, oid);
+			obj->loc = loc;
+		break;
+		default:
+			assert(false); exit(EXIT_FAILURE);
+	}
+}
+
+static void obj_unset_loc(oid_t oid)
+{
+	obj_t* obj = get_obj(oid);
+	assert(obj != NULL);
+	switch (obj->loc.type)
+	{
+		case LOC_ON_TILE:
+			oid_da_remove(&get_tile(loc_tc(obj->loc))->oid_da, oid);
+			obj->loc = (loc_t){.type = LOC_NONE};
+		break;
+		case LOC_IN_OBJ:
+			oid_da_remove(&get_obj(obj->loc.in_obj_oid)->contained_da, oid);
+			obj->loc = (loc_t){.type = LOC_NONE};
+		break;
+		default:
+			assert(false); exit(EXIT_FAILURE);
+	}
+}
+
+oid_t obj_create(obj_type_t type, loc_t loc)
 {
 	int index;
 	for (int i = 0; i < g_obj_da_len; i++)
@@ -58,11 +111,11 @@ oid_t obj_alloc(obj_type_t type, loc_t loc)
 	entry->generation++;
 
 	oid_t oid = {.index = index, .generation = entry->generation};
-	oid_da_add(&get_tile(loc_tc(loc))->oid_da, oid);
+	obj_set_loc(oid, loc);
 	return oid;
 }
 
-/* Checks for `oid_t`s that were probably not returned by `obj_alloc` or corrupted.
+/* Checks for `oid_t`s that were probably not returned by `obj_create` or corrupted.
  * Does not errors on `OID_NULL` (because these make sens). */
 void assert_oid_makes_sens(oid_t oid)
 {
@@ -84,15 +137,23 @@ void assert_oid_makes_sens(oid_t oid)
 	#endif
 }
 
-void obj_dealloc(oid_t oid)
+void obj_destroy(oid_t oid)
 {
 	assert_oid_makes_sens(oid);
 	assert(!oid_eq(oid, OID_NULL));
 	obj_entry_t* entry = &g_obj_da[oid.index];
 	if (entry->generation == oid.generation)
 	{
+		/* If the object being destroyed contained subobjects,
+		 * then now the subobjects have to be located at the same
+		 * place as the container was. */
+		for (int i = 0; i < entry->obj->contained_da.len; i++)
+		{
+			obj_change_loc(entry->obj->contained_da.arr[i], entry->obj->loc);
+		}
+
+		obj_unset_loc(oid);
 		entry->exists = false;
-		oid_da_remove(&get_tile(loc_tc(entry->obj->loc))->oid_da, oid);
 	}
 	else
 	{
@@ -117,14 +178,20 @@ obj_t* get_obj(oid_t oid)
 	}
 }
 
-void obj_move(oid_t oid, tc_t dst_tc)
+void obj_move_tc(oid_t oid, tc_t dst_tc)
 {
 	obj_t* obj = get_obj(oid);
-	tile_t* src_tile = get_tile(loc_tc(obj->loc));
-	tile_t* dst_tile = get_tile(dst_tc);
-	oid_da_remove(&src_tile->oid_da, oid);
-	oid_da_add(&dst_tile->oid_da, oid);
-	obj->loc = tc_to_loc(dst_tc);
+	assert(obj != NULL);
+	assert(obj->loc.type == LOC_ON_TILE);
+	obj_unset_loc(oid);
+	obj_set_loc(oid, tc_to_loc(dst_tc));
+}
+
+void obj_change_loc(oid_t oid, loc_t new_loc)
+{
+	assert(get_obj(oid) != NULL);
+	obj_unset_loc(oid);
+	obj_set_loc(oid, new_loc);
 }
 
 void oid_da_add(oid_da_t* da, oid_t oid)

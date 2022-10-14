@@ -47,7 +47,7 @@ typedef struct objid_t objid_t;
 
 #define OBJID_NULL ((objid_t){.generation = 0})
 
-objid_t obj_alloc(int obj_size);
+objid_t obj_create(int obj_size);
 #define OBJ_ALLOC(obj_type_) obj_alloc(sizeof(obj_type_))
 
 #endif /* WHYCRYSTALS_HEADER_OBJS_ */

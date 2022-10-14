@@ -372,7 +372,7 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 			g_game_over = true;
 			g_game_over_cause = format("Killed by a %s.", obj_type_name(obj_attacker->type));
 		}
-		obj_dealloc(oid_target);
+		obj_destroy(oid_target);
 	}
 	else
 	{
@@ -461,7 +461,7 @@ void obj_try_move(oid_t oid, tm_t move)
 		}
 	}
 
-	obj_move(oid, dst_tc);
+	obj_move_tc(oid, dst_tc);
 
 	visual_effect_da_add(&get_obj(oid)->visual_effect_da, (visual_effect_t){
 		.type = VISUAL_EFFECT_MOVE,
@@ -475,7 +475,7 @@ void generate_map(void)
 	tc_t crystal_tc = {
 		.x = g_mg_rect.x + g_mg_rect.w / 4 + rand() % (g_mg_rect.w / 9),
 		.y = g_mg_rect.y + g_mg_rect.h / 3 + rand() % (g_mg_rect.h / 3)};
-	g_crystal_oid = obj_alloc(OBJ_CRYSTAL, tc_to_loc(crystal_tc));
+	g_crystal_oid = obj_create(OBJ_CRYSTAL, tc_to_loc(crystal_tc));
 
 	/* Generate the path. */
 	int path_try_count = 0;
@@ -598,30 +598,30 @@ void generate_map(void)
 		
 		if (rand() % 5 == 0)
 		{
-			oid_t oid = obj_alloc(OBJ_ROCK, tc_to_loc(tc));
+			oid_t oid = obj_create(OBJ_ROCK, tc_to_loc(tc));
 			get_obj(oid)->life = 1000;
 		}
 		else if (rand() % (neighbor_to_path ? 2 : 5) == 0)
 		{
-			oid_t oid = obj_alloc(OBJ_TREE, tc_to_loc(tc));
+			oid_t oid = obj_create(OBJ_TREE, tc_to_loc(tc));
 			get_obj(oid)->life = 100;
 		}
 		else if (rand() % 3 != 0)
 		{
-			oid_t oid = obj_alloc(OBJ_GRASS, tc_to_loc(tc));
+			oid_t oid = obj_create(OBJ_GRASS, tc_to_loc(tc));
 			get_obj(oid)->life = 4;
 		}
 		else if (rand() % 3 != 0)
 		{
-			oid_t oid = obj_alloc(OBJ_MOSS, tc_to_loc(tc));
+			oid_t oid = obj_create(OBJ_MOSS, tc_to_loc(tc));
 			get_obj(oid)->life = 2;
 		}
 		else if (rand() % 3 != 0)
 		{
-			oid_t oid = obj_alloc(OBJ_BUSH, tc_to_loc(tc));
+			oid_t oid = obj_create(OBJ_BUSH, tc_to_loc(tc));
 			get_obj(oid)->life = 8;
 
-			oid = obj_alloc(OBJ_MOSS, tc_to_loc(tc));
+			oid = obj_create(OBJ_MOSS, tc_to_loc(tc));
 			get_obj(oid)->life = 2;
 		}
 
@@ -631,12 +631,17 @@ void generate_map(void)
 		{
 			if (rand() % 20 == 0)
 			{
-				oid_t oid = obj_alloc(OBJ_SLIME, tc_to_loc(tc));
-				get_obj(oid)->life = 5;
+				oid_t slime_oid = obj_create(OBJ_SLIME, tc_to_loc(tc));
+				get_obj(slime_oid)->life = 5;
+				if (rand() % 2 == 0)
+				{
+					oid_t content_oid = obj_create(OBJ_CATERPILLAR, in_obj_loc(slime_oid));
+					get_obj(content_oid)->life = 1;
+				}
 			}
 			else if (rand() % 50 == 0)
 			{
-				oid_t oid = obj_alloc(OBJ_CATERPILLAR, tc_to_loc(tc));
+				oid_t oid = obj_create(OBJ_CATERPILLAR, tc_to_loc(tc));
 				get_obj(oid)->life = 6;
 			}
 		}
@@ -706,7 +711,7 @@ int main(void)
 			}
 			tc = new_tc;
 		}
-		g_player_oid = obj_alloc(OBJ_PLAYER, tc_to_loc(tc));
+		g_player_oid = obj_create(OBJ_PLAYER, tc_to_loc(tc));
 		get_obj(g_player_oid)->life = 10;
 	}
 
@@ -789,6 +794,10 @@ int main(void)
 
 				if (obj->type == OBJ_SLIME)
 				{
+					if (obj->loc.type != LOC_ON_TILE)
+					{
+						continue;
+					}
 					if (rand() % 3 == 0)
 					{
 						obj_try_move(oid, rand_tm_one());
@@ -796,6 +805,10 @@ int main(void)
 				}
 				else if (obj->type == OBJ_CATERPILLAR)
 				{
+					if (obj->loc.type != LOC_ON_TILE)
+					{
+						continue;
+					}
 					for (int i = 0; i < 4; i++)
 					{
 						tm_t tm = TM_ONE_ALL[i];
@@ -893,6 +906,10 @@ int main(void)
 			{
 				text = "o";
 				text_color = g_color_cyan;
+				if (get_obj(oid_da_find_type(&tile->oid_da, OBJ_SLIME))->contained_da.len > 0)
+				{
+					text_color = g_color_yellow;
+				}
 			}
 			else if (oid_da_contains_type(&tile->oid_da, OBJ_CATERPILLAR))
 			{

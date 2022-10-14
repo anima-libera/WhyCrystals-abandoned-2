@@ -44,7 +44,7 @@ obj_t* obj_get(objid_t objid)
 
 bool g_debug_obj_allocation = false;
 
-objid_t obj_alloc(int obj_size)
+objid_t obj_create(int obj_size)
 {
 	int entry_index;
 	for (int i = 0; i < g_objda_len; i++)

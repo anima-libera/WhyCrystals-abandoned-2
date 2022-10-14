@@ -5,32 +5,6 @@
 #include "tc.h"
 #include <stdbool.h>
 
-/* A location that represents a place in the world. */
-struct loc_t
-{
-	tc_t tc;
-	/* NOTE: At some point a `loc_t` will be able to represent the fact of being
-	 * contained by an other object instead of just being on a tile. */
-};
-typedef struct loc_t loc_t;
-
-tc_t loc_tc(loc_t loc);
-loc_t tc_to_loc(tc_t tc);
-
-enum obj_type_t
-{
-	OBJ_PLAYER,
-	OBJ_CRYSTAL,
-	OBJ_ROCK,
-	OBJ_GRASS,
-	OBJ_BUSH,
-	OBJ_MOSS,
-	OBJ_TREE,
-	OBJ_SLIME,
-	OBJ_CATERPILLAR,
-};
-typedef enum obj_type_t obj_type_t;
-
 /* Object ID.
  * An `oid_t` refers to an object of the `g_obj_da` global dynamic array of objects.
  * References to objects should be `oid_t`s instead of pointers. That is because
@@ -49,19 +23,59 @@ struct oid_t
 };
 typedef struct oid_t oid_t;
 
+enum loc_type_t
+{
+	LOC_NONE,
+	LOC_ON_TILE,
+	LOC_IN_OBJ,
+};
+typedef enum loc_type_t loc_type_t;
+
+/* A location that represents a place in the world. */
+struct loc_t
+{
+	loc_type_t type;
+	union
+	{
+		tc_t on_tile_tc;
+		oid_t in_obj_oid;
+	};
+};
+typedef struct loc_t loc_t;
+
+tc_t loc_tc(loc_t loc);
+loc_t tc_to_loc(tc_t tc);
+loc_t in_obj_loc(oid_t container_oid);
+
+enum obj_type_t
+{
+	OBJ_PLAYER,
+	OBJ_CRYSTAL,
+	OBJ_ROCK,
+	OBJ_GRASS,
+	OBJ_BUSH,
+	OBJ_MOSS,
+	OBJ_TREE,
+	OBJ_SLIME,
+	OBJ_CATERPILLAR,
+};
+typedef enum obj_type_t obj_type_t;
+
 /* `0` cannot be the generation of an entry in `g_obj_da`, so `(oid_t){0}`
  * can be used to represent a null id or something. */
 #define OID_NULL (oid_t){0}
 
 bool oid_eq(oid_t oid_a, oid_t oid_b);
 
-oid_t obj_alloc(obj_type_t type, loc_t loc);
+oid_t obj_create(obj_type_t type, loc_t loc);
 void assert_oid_makes_sens(oid_t oid);
-void obj_dealloc(oid_t oid);
+void obj_destroy(oid_t oid);
 typedef struct obj_t obj_t;
 obj_t* get_obj(oid_t oid);
 
-void obj_move(oid_t oid, tc_t dst_tc);
+void obj_move_tc(oid_t oid, tc_t dst_tc);
+
+void obj_change_loc(oid_t oid, loc_t new_loc);
 
 struct oid_da_t
 {
@@ -117,7 +131,7 @@ struct obj_t
 {
 	obj_type_t type;
 	loc_t loc;
-
+	oid_da_t contained_da;
 	int life;
 
 	visual_effect_da_t visual_effect_da;
