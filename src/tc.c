@@ -1,6 +1,7 @@
 
 #include "tc.h"
 #include <stdlib.h>
+#include <assert.h>
 
 bool tc_eq(tc_t a, tc_t b)
 {
@@ -37,4 +38,82 @@ tm_t tm_reverse(tm_t move)
 tm_t tc_diff_as_tm(tc_t src, tc_t dst)
 {
     return (tm_t){.x = dst.x - src.x, .y = dst.y - src.y};
+}
+
+tm_t tm_from_arrow_key(SDL_KeyCode keycode)
+{
+	switch (keycode)
+	{
+		case SDLK_UP:    return TM_UP;
+		case SDLK_RIGHT: return TM_RIGHT;
+		case SDLK_DOWN:  return TM_DOWN;
+		case SDLK_LEFT:  return TM_LEFT;
+		default:         assert(false); exit(EXIT_FAILURE);
+	}
+}
+
+/* Section Bresenham. */
+
+bresenham_it_t line_bresenham_init(tc_t a, tc_t b)
+{
+	bresenham_it_t it;
+	it.a = a;
+	it.b = b;
+	#define LINE_BRESENHAM_INIT(x_, y_) \
+		it.d##x_ = abs(it.b.x_ - it.a.x_); \
+		it.d##y_ = it.b.y_ - it.a.y_; \
+		it.i = 1; \
+		if (it.d##y_ < 0) \
+		{ \
+			it.i *= -1; \
+			it.d##y_ *= -1; \
+		} \
+		it.d = (2 * it.d##y_) - it.d##x_; \
+		it.head.x = it.a.x; \
+		it.head.y = it.a.y;
+	if (abs(b.y - a.y) < abs(b.x - a.x))
+	{
+		LINE_BRESENHAM_INIT(x, y)
+	}
+	else
+	{
+		LINE_BRESENHAM_INIT(y, x)
+	}
+	#undef LINE_BRESENHAM_INIT
+	it.just_initialized = true;
+	return it;
+}
+
+bool line_bresenham_iter(bresenham_it_t* it)
+{
+	if (it->just_initialized)
+	{
+		it->just_initialized = false;
+		return true;
+	}
+	#define LINE_BRESENHAM_ITER(x_, y_) \
+		if (it->head.x_ == it->b.x_) \
+		{ \
+			return false; \
+		} \
+		it->head.x_ += it->a.x_ < it->b.x_ ? 1 : -1; \
+		if (it->d > 0) \
+		{ \
+			it->head.y_ += it->i; \
+			it->d += (2 * (it->d##y_ - it->d##x_)); \
+		} \
+		else \
+		{ \
+			it->d += 2 * it->d##y_; \
+		} \
+		return true;
+	if (abs(it->b.y - it->a.y) < abs(it->b.x - it->a.x))
+	{
+		LINE_BRESENHAM_ITER(x, y)
+	}
+	else
+	{
+		LINE_BRESENHAM_ITER(y, x)
+	}
+	#undef LINE_BRESENHAM_ITER
 }

@@ -2,6 +2,7 @@
 #ifndef WHYCRYSTALS_HEADER_TC_
 #define WHYCRYSTALS_HEADER_TC_
 
+#include <SDL2/SDL.h>
 #include <stdbool.h>
 
 /* Tile coords. */
@@ -34,5 +35,25 @@ bool tm_one_orthogonal(tm_t a, tm_t b);
 tc_t tc_add_tm(tc_t tc, tm_t move);
 tm_t tm_reverse(tm_t move);
 tm_t tc_diff_as_tm(tc_t src, tc_t dst);
+tm_t tm_from_arrow_key(SDL_KeyCode keycode);
+
+/* Section Bresenham. */
+
+/* Bresenham line algorithm iterator (that respects the order:
+ * the first step will be A and the last will be B).
+ * It should be used as follows:
+ *    bresenham_it_t it = line_bresenham_init(a_tc, b_tc);
+ *    while (line_bresenham_iter(&it)) {...}
+ * where the current step tc is `it.head`. */
+struct bresenham_it_t
+{
+	tc_t a, b, head;
+	int dx, dy, i, d;
+	bool just_initialized;
+};
+typedef struct bresenham_it_t bresenham_it_t;
+
+bresenham_it_t line_bresenham_init(tc_t a, tc_t b);
+bool line_bresenham_iter(bresenham_it_t* it);
 
 #endif /* WHYCRYSTALS_HEADER_TC_ */

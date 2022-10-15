@@ -226,78 +226,6 @@ void draw_log(void)
 
 int g_tile_w = 30, g_tile_h = 30;
 
-struct bresenham_it_t
-{
-	tc_t a, b, head;
-	int dx, dy, i, d;
-	bool just_initialized;
-};
-typedef struct bresenham_it_t bresenham_it_t;
-
-bresenham_it_t line_bresenham_init(tc_t a, tc_t b)
-{
-	bresenham_it_t it;
-	it.a = a;
-	it.b = b;
-	#define LINE_BRESENHAM_INIT(x_, y_) \
-		it.d##x_ = abs(it.b.x_ - it.a.x_); \
-		it.d##y_ = it.b.y_ - it.a.y_; \
-		it.i = 1; \
-		if (it.d##y_ < 0) \
-		{ \
-			it.i *= -1; \
-			it.d##y_ *= -1; \
-		} \
-		it.d = (2 * it.d##y_) - it.d##x_; \
-		it.head.x = it.a.x; \
-		it.head.y = it.a.y;
-	if (abs(b.y - a.y) < abs(b.x - a.x))
-	{
-		LINE_BRESENHAM_INIT(x, y)
-	}
-	else
-	{
-		LINE_BRESENHAM_INIT(y, x)
-	}
-	#undef LINE_BRESENHAM_INIT
-	it.just_initialized = true;
-	return it;
-}
-
-bool line_bresenham_iter(bresenham_it_t* it)
-{
-	if (it->just_initialized)
-	{
-		it->just_initialized = false;
-		return true;
-	}
-	#define LINE_BRESENHAM_ITER(x_, y_) \
-		if (it->head.x_ == it->b.x_) \
-		{ \
-			return false; \
-		} \
-		it->head.x_ += it->a.x_ < it->b.x_ ? 1 : -1; \
-		if (it->d > 0) \
-		{ \
-			it->head.y_ += it->i; \
-			it->d += (2 * (it->d##y_ - it->d##x_)); \
-		} \
-		else \
-		{ \
-			it->d += 2 * it->d##y_; \
-		} \
-		return true;
-	if (abs(it->b.y - it->a.y) < abs(it->b.x - it->a.x))
-	{
-		LINE_BRESENHAM_ITER(x, y)
-	}
-	else
-	{
-		LINE_BRESENHAM_ITER(y, x)
-	}
-	#undef LINE_BRESENHAM_ITER
-}
-
 int obj_type_vision_blocking(obj_type_t type)
 {
 	switch (type)
@@ -839,12 +767,7 @@ int main(void)
 						case SDLK_LEFT:
 							if (!g_game_over)
 							{
-								tm_t dir =
-									event.key.keysym.sym == SDLK_UP ? TM_UP :
-									event.key.keysym.sym == SDLK_RIGHT ? TM_RIGHT :
-									event.key.keysym.sym == SDLK_DOWN ? TM_DOWN :
-									event.key.keysym.sym == SDLK_LEFT ? TM_LEFT :
-									(assert(false), (tm_t){0});
+								tm_t dir = tm_from_arrow_key(event.key.keysym.sym);
 								obj_try_move(g_player_oid, dir);
 								perform_turn = true;
 							}
