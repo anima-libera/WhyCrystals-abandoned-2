@@ -420,10 +420,10 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 	}
 	else
 	{
-		visual_effect_da_add(&obj_target->visual_effect_da, (visual_effect_t){
-			.type = VISUAL_EFFECT_DAMAGED,
-			.t_begin = g_game_duration,
-			.t_end = g_game_duration + 100,
+		visual_effect_obj_da_add(&obj_target->visual_effect_da, (visual_effect_obj_t){
+			.type = VISUAL_EFFECT_OBJ_DAMAGED,
+			.time_begin = g_game_duration,
+			.time_end = g_game_duration + 100,
 			.dir = dir});
 		if (event_visible)
 		{
@@ -431,10 +431,10 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 				obj_type_name(obj_attacker->type), obj_type_name(obj_target->type));
 		}
 	}
-	visual_effect_da_add(&obj_attacker->visual_effect_da, (visual_effect_t){
-		.type = VISUAL_EFFECT_ATTACK,
-		.t_begin = g_game_duration,
-		.t_end = g_game_duration + 80,
+	visual_effect_obj_da_add(&obj_attacker->visual_effect_da, (visual_effect_obj_t){
+		.type = VISUAL_EFFECT_OBJ_ATTACK,
+		.time_begin = g_game_duration,
+		.time_end = g_game_duration + 80,
 		.dir = dir});
 }
 
@@ -506,12 +506,12 @@ void obj_try_move(oid_t oid, tm_t move)
 		}
 	}
 
-	obj_move_tc(oid, dst_tc);
+	obj_change_loc(oid, tc_to_loc(dst_tc));
 
-	visual_effect_da_add(&get_obj(oid)->visual_effect_da, (visual_effect_t){
-		.type = VISUAL_EFFECT_MOVE,
-		.t_begin = g_game_duration,
-		.t_end = g_game_duration + 60,
+	visual_effect_obj_da_add(&get_obj(oid)->visual_effect_da, (visual_effect_obj_t){
+		.type = VISUAL_EFFECT_OBJ_MOVE,
+		.time_begin = g_game_duration,
+		.time_end = g_game_duration + 60,
 		.dir = tm_reverse(move)});
 }
 
@@ -520,7 +520,7 @@ void generate_map(void)
 	tc_t crystal_tc = {
 		.x = g_mg_rect.x + g_mg_rect.w / 4 + rand() % (g_mg_rect.w / 9),
 		.y = g_mg_rect.y + g_mg_rect.h / 3 + rand() % (g_mg_rect.h / 3)};
-	g_crystal_oid = obj_create(OBJ_CRYSTAL, tc_to_loc(crystal_tc));
+	obj_create(OBJ_CRYSTAL, tc_to_loc(crystal_tc));
 
 	/* Generate the path. */
 	int path_try_count = 0;
@@ -680,7 +680,7 @@ void generate_map(void)
 				get_obj(slime_oid)->life = 5;
 				if (rand() % 2 == 0)
 				{
-					oid_t content_oid = obj_create(OBJ_CATERPILLAR, in_obj_loc(slime_oid));
+					oid_t content_oid = obj_create(OBJ_CATERPILLAR, inside_obj_loc(slime_oid));
 					get_obj(content_oid)->life = 1;
 				}
 			}
@@ -1037,22 +1037,22 @@ int main(void)
 				}
 				for (int i = 0; i < obj->visual_effect_da.len; i++)
 				{
-					visual_effect_t* ve = &obj->visual_effect_da.arr[i];
-					if (g_game_duration > ve->t_end)
+					visual_effect_obj_t* ve = &obj->visual_effect_da.arr[i];
+					if (g_game_duration > ve->time_end)
 					{
-						visual_effect_da_remove(&obj->visual_effect_da, i);
+						visual_effect_obj_da_remove(&obj->visual_effect_da, i);
 						continue;
 					}
-					if (ve->type == VISUAL_EFFECT_NONE)
+					if (ve->type == VISUAL_EFFECT_OBJ_NONE)
 					{
 						continue;
 					}
-					if (ve->type != VISUAL_EFFECT_NONE)
+					if (ve->type != VISUAL_EFFECT_OBJ_NONE)
 					{
-						int t = g_game_duration - ve->t_begin;
-						int t_max = ve->t_end - ve->t_begin;
+						int t = g_game_duration - ve->time_begin;
+						int t_max = ve->time_end - ve->time_begin;
 
-						if (ve->type == VISUAL_EFFECT_DAMAGED)
+						if (ve->type == VISUAL_EFFECT_OBJ_DAMAGED)
 						{
 							text_color = g_color_red;
 
@@ -1064,8 +1064,8 @@ int main(void)
 							rect.x = interpolate(t + 40, t_max + 40, src_rect.x, rect.x);
 							rect.y = interpolate(t + 40, t_max + 40, src_rect.y, rect.y);
 						}
-						else if (ve->type == VISUAL_EFFECT_MOVE ||
-							ve->type == VISUAL_EFFECT_ATTACK)
+						else if (ve->type == VISUAL_EFFECT_OBJ_MOVE ||
+							ve->type == VISUAL_EFFECT_OBJ_ATTACK)
 						{
 							tc_t src = tc_add_tm(tc, ve->dir);
 							SDL_Rect src_rect = {
