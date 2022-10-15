@@ -699,6 +699,8 @@ int main(void)
 	int start_loop_time = SDL_GetTicks();
 	g_game_duration = 0;
 	int iteration_duration = 0; /* In milliseconds. */
+	int iteration_number = 0;
+	int fps_in_some_recent_iteration = 0;
 
 	bool running = true;
 	while (running)
@@ -1039,8 +1041,7 @@ int main(void)
 			}
 			
 			{
-				char* text = format("FPS: %.0f",
-					iteration_duration > 0.0f ?  1.0f / iteration_duration : 0.0f);
+				char* text = format("FPS: %d", fps_in_some_recent_iteration);
 				draw_text_sc(text,
 					rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
 				free(text);
@@ -1070,8 +1071,16 @@ int main(void)
 
 		SDL_RenderPresent(g_renderer);
 
+		iteration_number++;
+
 		int end_iteration_time = SDL_GetTicks();
 		iteration_duration = end_iteration_time - start_iteration_time;
+
+		if (iteration_number % 20 == 0)
+		{
+			fps_in_some_recent_iteration =
+				iteration_duration == 0 ? 0.0f : 1000 / iteration_duration;
+		}
 	}
 
 	TTF_Quit();
