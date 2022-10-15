@@ -278,6 +278,12 @@ int obj_type_vision_blocking(obj_type_t type)
 
 void recompute_vision(void)
 {
+	obj_t* player_obj = get_obj(g_player_oid);
+	if (player_obj == NULL)
+	{
+		return;
+	}
+
 	for (int y = 0; y < g_mg_rect.h; y++)
 	for (int x = 0; x < g_mg_rect.w; x++)
 	{
@@ -286,7 +292,7 @@ void recompute_vision(void)
 		tile->vision = 0;
 	}
 
-	tc_t src_tc = loc_tc(get_obj(g_player_oid)->loc);
+	tc_t src_tc = loc_tc(player_obj->loc);
 
 	for (int y = 0; y < g_mg_rect.h; y++)
 	for (int x = 0; x < g_mg_rect.w; x++)
@@ -434,7 +440,8 @@ bool obj_type_can_get_hit_for_now(obj_type_t type)
 
 void obj_try_move(oid_t oid, tm_t move)
 {
-	assert(get_obj(oid) != NULL);
+	obj_t* moving_obj = get_obj(oid);
+	assert(moving_obj != NULL);
 	tc_t dst_tc = tc_add_tm(loc_tc(get_obj(oid)->loc), move);
 	tile_t* dst_tile = get_tile(dst_tc);
 	if (dst_tile == NULL)
@@ -455,7 +462,7 @@ void obj_try_move(oid_t oid, tm_t move)
 			obj_hits_obj(oid, oid_on_dst);
 			return;
 		}
-		else if (obj_type_is_blocking(obj_on_dst->type))
+		else if (obj_type_is_blocking(moving_obj->type) && obj_type_is_blocking(obj_on_dst->type))
 		{
 			return;
 		}
@@ -757,6 +764,32 @@ int main(void)
 						case SDLK_ESCAPE:
 							running = false;
 						break;
+						case SDLK_s:
+							/* Sucide key (for debugging purposes). */
+							obj_destroy(g_player_oid);
+							log_text("Game over.");
+							g_game_over = true;
+							g_game_over_cause = format("Killed by suicide xd.");
+						break;
+						case SDLK_p:
+							/* Possess key (for debugging purposes). */
+							while (true)
+							{
+								oid_t oid = rand_oid();
+								obj_t* obj = get_obj(oid);
+								if (obj->loc.type == LOC_TILE)
+								{
+									if (rand() % 30 != 0)
+									{
+										continue;
+									}
+									g_player_oid = oid;
+									perform_turn = true;
+									log_text("Possessing somthing somewhere.");
+									break;
+								}
+							}
+						break;
 						case SDLK_KP_PLUS:
 						case SDLK_KP_MINUS:
 							g_tile_w += 5 * (event.key.keysym.sym == SDLK_KP_PLUS ? 1 : -1);
@@ -794,7 +827,7 @@ int main(void)
 
 				if (obj->type == OBJ_SLIME)
 				{
-					if (obj->loc.type != LOC_ON_TILE)
+					if (obj->loc.type != LOC_TILE)
 					{
 						continue;
 					}
@@ -805,7 +838,7 @@ int main(void)
 				}
 				else if (obj->type == OBJ_CATERPILLAR)
 				{
-					if (obj->loc.type != LOC_ON_TILE)
+					if (obj->loc.type != LOC_TILE)
 					{
 						continue;
 					}
@@ -844,14 +877,18 @@ int main(void)
 
 		/* Move the camera (smoothly) to keep the player centered. */
 		{
-			tc_t player_tc = loc_tc(get_obj(g_player_oid)->loc);
-			float const target_camera_x =
-				(float)player_tc.x * (float)g_tile_w + 0.5f * (float)g_tile_w;
-			float const target_camera_y =
-				(float)player_tc.y * (float)g_tile_h + 0.5f * (float)g_tile_h;
-			float const camera_speed = 0.035f;
-			camera_x += (target_camera_x - camera_x) * camera_speed;
-			camera_y += (target_camera_y - camera_y) * camera_speed;
+			obj_t* player_obj = get_obj(g_player_oid);
+			if (player_obj != NULL)
+			{
+				tc_t player_tc = loc_tc(player_obj->loc);
+				float const target_camera_x =
+					(float)player_tc.x * (float)g_tile_w + 0.5f * (float)g_tile_w;
+				float const target_camera_y =
+					(float)player_tc.y * (float)g_tile_h + 0.5f * (float)g_tile_h;
+				float const camera_speed = 0.035f;
+				camera_x += (target_camera_x - camera_x) * camera_speed;
+				camera_y += (target_camera_y - camera_y) * camera_speed;
+			}
 		}
 
 		SDL_SetRenderDrawColor(g_renderer,
@@ -1020,11 +1057,15 @@ int main(void)
 			int y = 10;
 
 			{
-				char* text = format("HP: %d", get_obj(g_player_oid)->life);
-				draw_text_sc(text,
-					rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
-				free(text);
-				y += 30;
+				obj_t* player_obj = get_obj(g_player_oid);
+				if (player_obj != NULL)
+				{
+					char* text = format("HP: %d", get_obj(g_player_oid)->life);
+					draw_text_sc(text,
+						rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
+					free(text);
+					y += 30;
+				}
 			}
 
 			if (g_game_over)

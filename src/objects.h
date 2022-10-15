@@ -26,8 +26,8 @@ typedef struct oid_t oid_t;
 enum loc_type_t
 {
 	LOC_NONE,
-	LOC_ON_TILE,
-	LOC_IN_OBJ,
+	LOC_TILE,
+	LOC_INSIDE_OBJ,
 };
 typedef enum loc_type_t loc_type_t;
 
@@ -37,8 +37,8 @@ struct loc_t
 	loc_type_t type;
 	union
 	{
-		tc_t on_tile_tc;
-		oid_t in_obj_oid;
+		tc_t tile_tc;
+		oid_t inside_obj_oid;
 	};
 };
 typedef struct loc_t loc_t;
@@ -144,5 +144,7 @@ typedef struct obj_t obj_t;
  * Every oid will be refering to an existing object.
  * Note that it is even possible to destroy the referred object. */
 bool oid_iter(oid_t* oid);
+
+oid_t rand_oid(void);
 
 #endif /* WHYCRYSTALS_HEADER_OBJECTS_ */

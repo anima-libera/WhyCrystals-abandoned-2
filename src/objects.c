@@ -9,11 +9,11 @@ tc_t loc_tc(loc_t loc)
 {
 	switch (loc.type)
 	{
-		case LOC_ON_TILE:
-			return loc.on_tile_tc;
-		case LOC_IN_OBJ:
-			assert(get_obj(loc.in_obj_oid) != NULL);
-			return loc_tc(get_obj(loc.in_obj_oid)->loc);
+		case LOC_TILE:
+			return loc.tile_tc;
+		case LOC_INSIDE_OBJ:
+			assert(get_obj(loc.inside_obj_oid) != NULL);
+			return loc_tc(get_obj(loc.inside_obj_oid)->loc);
 		default:
 			assert(false); exit(EXIT_FAILURE);
 	}
@@ -21,13 +21,13 @@ tc_t loc_tc(loc_t loc)
 
 loc_t tc_to_loc(tc_t tc)
 {
-	return (loc_t){.type = LOC_ON_TILE, .on_tile_tc = tc};
+	return (loc_t){.type = LOC_TILE, .tile_tc = tc};
 }
 
 loc_t in_obj_loc(oid_t container_oid)
 {
 	assert(get_obj(container_oid) != NULL);
-	return (loc_t){.type = LOC_IN_OBJ, .in_obj_oid = container_oid};
+	return (loc_t){.type = LOC_INSIDE_OBJ, .inside_obj_oid = container_oid};
 }
 
 struct obj_entry_t
@@ -54,12 +54,12 @@ static void obj_set_loc(oid_t oid, loc_t loc)
 	assert(obj != NULL);
 	switch (loc.type)
 	{
-		case LOC_ON_TILE:
+		case LOC_TILE:
 			oid_da_add(&get_tile(loc_tc(loc))->oid_da, oid);
 			obj->loc = loc;
 		break;
-		case LOC_IN_OBJ:
-			oid_da_add(&get_obj(loc.in_obj_oid)->contained_da, oid);
+		case LOC_INSIDE_OBJ:
+			oid_da_add(&get_obj(loc.inside_obj_oid)->contained_da, oid);
 			obj->loc = loc;
 		break;
 		default:
@@ -73,12 +73,12 @@ static void obj_unset_loc(oid_t oid)
 	assert(obj != NULL);
 	switch (obj->loc.type)
 	{
-		case LOC_ON_TILE:
+		case LOC_TILE:
 			oid_da_remove(&get_tile(loc_tc(obj->loc))->oid_da, oid);
 			obj->loc = (loc_t){.type = LOC_NONE};
 		break;
-		case LOC_IN_OBJ:
-			oid_da_remove(&get_obj(obj->loc.in_obj_oid)->contained_da, oid);
+		case LOC_INSIDE_OBJ:
+			oid_da_remove(&get_obj(obj->loc.inside_obj_oid)->contained_da, oid);
 			obj->loc = (loc_t){.type = LOC_NONE};
 		break;
 		default:
@@ -105,7 +105,7 @@ oid_t obj_create(obj_type_t type, loc_t loc)
 	index_found:;
 	obj_entry_t* entry = &g_obj_da[index];
 	obj_t* obj = malloc(sizeof(obj_t));
-	*obj = (obj_t){.type = type, .loc = loc};
+	*obj = (obj_t){.type = type, .loc = loc, .life = 1};
 	entry->obj = obj;
 	entry->exists = true;
 	entry->generation++;
@@ -142,7 +142,7 @@ void obj_destroy(oid_t oid)
 	assert_oid_makes_sens(oid);
 	assert(!oid_eq(oid, OID_NULL));
 	obj_entry_t* entry = &g_obj_da[oid.index];
-	if (entry->generation == oid.generation)
+	if (entry->exists && entry->generation == oid.generation)
 	{
 		/* If the object being destroyed contained subobjects,
 		 * then now the subobjects have to be located at the same
@@ -168,7 +168,7 @@ obj_t* get_obj(oid_t oid)
 {
 	assert_oid_makes_sens(oid);
 	obj_entry_t* entry = &g_obj_da[oid.index];
-	if (entry->generation == oid.generation)
+	if (entry->exists && entry->generation == oid.generation)
 	{
 		return entry->obj;
 	}
@@ -182,7 +182,7 @@ void obj_move_tc(oid_t oid, tc_t dst_tc)
 {
 	obj_t* obj = get_obj(oid);
 	assert(obj != NULL);
-	assert(obj->loc.type == LOC_ON_TILE);
+	assert(obj->loc.type == LOC_TILE);
 	obj_unset_loc(oid);
 	obj_set_loc(oid, tc_to_loc(dst_tc));
 }
@@ -296,4 +296,14 @@ bool oid_iter(oid_t* oid)
 		oid->index++;
 	}
 	return false;
+}
+
+oid_t rand_oid(void)
+{
+	int index = rand() % g_obj_da_len;
+	while (!g_obj_da[index].exists)
+	{
+		index = rand() % g_obj_da_len;
+	}
+	return (oid_t){.index = index, .generation = g_obj_da[index].generation};
 }
