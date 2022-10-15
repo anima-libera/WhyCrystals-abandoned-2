@@ -95,9 +95,16 @@ int g_turn_number = 0;
 
 struct log_entry_t
 {
+	/* Can be NULL, in which case the entry is just a separator. */
 	char* text;
+	/* The number of the turn during which this entry was logged.
+	 * This is useful to make the entry disappear after a few turns. */
 	int turn_number;
+	/* When the entry is to disappear, it is given a countdown for a fading effect. */
 	int time_remaining;
+	#define LOG_ENTRY_TIME_REMAINING_INIT 60
+	/* This is the time at which the entry was logged, for an appearing effect. */
+	int time_created;
 };
 typedef struct log_entry_t log_entry_t;
 
@@ -146,42 +153,73 @@ void log_text(char* format, ...)
 	g_log_da[0] = (log_entry_t){
 		.text = text,
 		.turn_number = g_turn_number,
-		.time_remaining = 200};
+		.time_remaining = LOG_ENTRY_TIME_REMAINING_INIT,
+		.time_created = SDL_GetTicks()};
+}
+
+void log_seperator(void)
+{
+	DA_LENGTHEN(g_log_len += 1, g_log_cap, g_log_da, log_entry_t);
+	for (int i = g_log_len-1; i > 0; i--)
+	{
+		g_log_da[i] = g_log_da[i-1];
+	}
+	g_log_da[0] = (log_entry_t){
+		.text = NULL,
+		.turn_number = g_turn_number,
+		.time_remaining = LOG_ENTRY_TIME_REMAINING_INIT,
+		.time_created = SDL_GetTicks()};
 }
 
 void draw_log(void)
 {
+	/* Not drawing the leading separators (if any) and the redundent separators
+	 * is more pleasing to the eyes, and it is easier than not producing these separators. */
+	bool last_was_not_text = true;
+
 	int y = g_window_h - 30;
 	for (int i = 0; i < g_log_len; i++)
 	{
-		int alpha = min(255, g_log_da[i].time_remaining * 6);
+		int alpha = min(255, g_log_da[i].time_remaining * (255 / LOG_ENTRY_TIME_REMAINING_INIT));
+		int time_existing = SDL_GetTicks() - g_log_da[i].time_created;
 
-		SDL_Texture* texture = text_to_texture(g_log_da[i].text,
-			rgb_to_rgba(g_color_white, 255), FONT_TL);
-		SDL_SetTextureAlphaMod(texture, alpha);
-		SDL_Rect rect = {.x = 10, .y = y};
-		SDL_QueryTexture(texture, NULL, NULL, &rect.w, &rect.h);
+		int height = min(5, time_existing);
+		if (g_log_da[i].text != NULL)
+		{
+			SDL_Texture* texture = text_to_texture(g_log_da[i].text,
+				rgb_to_rgba(g_color_white, 255), FONT_TL);
+			SDL_SetTextureAlphaMod(texture, alpha);
+			SDL_Rect rect = {.x = 10};
+			SDL_QueryTexture(texture, NULL, NULL, &rect.w, &rect.h);
+			rect.h = min(rect.h, time_existing / 3);
+			rect.y = y - rect.h;
+			height = rect.h;
 
-		SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
-		SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, alpha / 3);
-		SDL_RenderFillRect(g_renderer, &rect);
-		SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-		SDL_RenderCopy(g_renderer, texture, NULL, &rect);
-		SDL_DestroyTexture(texture);
-		SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_NONE);
+			SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
+			SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, alpha / 3);
+			SDL_RenderFillRect(g_renderer, &rect);
+			SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+			SDL_RenderCopy(g_renderer, texture, NULL, &rect);
+			SDL_DestroyTexture(texture);
+			SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_NONE);
+		}
 
 		if (g_turn_number > g_log_da[i].turn_number + 16)
 		{
 			g_log_da[i].time_remaining--;
 		}
 
-		y -= rect.h;
+		if (g_log_da[i].text != NULL || !last_was_not_text)
+		{
+			y -= height;
+		}
+
+		last_was_not_text = g_log_da[i].text == NULL;
 	}
 
-	if (g_log_len > 0 && g_log_da[g_log_len-1].time_remaining <= 0)
+	while (g_log_len > 0 && g_log_da[g_log_len-1].time_remaining <= 0)
 	{
 		free(g_log_da[g_log_len-1].text);
-		g_log_da[g_log_len-1] = (log_entry_t){0};
 		g_log_len--;
 	}
 }
@@ -874,6 +912,7 @@ int main(void)
 				recompute_vision();
 				g_turn_number++;
 			}
+			log_seperator();
 		}
 
 		/* Move the camera (smoothly) to keep the player centered. */
@@ -1085,6 +1124,7 @@ int main(void)
 				y += 30;
 			}
 
+			#if 0
 			{
 				char* text = format("Time: %.1f s", (float)g_game_duration / 1000.0f);
 				draw_text_sc(text,
@@ -1092,6 +1132,7 @@ int main(void)
 				free(text);
 				y += 30;
 			}
+			#endif
 
 			{
 				char* text = format("Obj count: %d", obj_count);
