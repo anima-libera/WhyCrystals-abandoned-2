@@ -372,7 +372,7 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 			log_text("A %s killed a %s.",
 				obj_type_name(obj_attacker->type), obj_type_name(obj_target->type));
 		}
-		if (obj_target->type == OBJ_PLAYER)
+		if (oid_eq(oid_target, g_player_oid))
 		{
 			log_text("Game over.");
 			g_game_over = true;
@@ -862,7 +862,8 @@ int main(void)
 				}
 			}
 
-			if (!g_game_over && get_obj(g_player_oid)->life <= 0)
+			obj_t* player_obj = get_obj(g_player_oid);
+			if (!g_game_over && (player_obj == NULL || player_obj->life <= 0))
 			{
 				log_text("Game over.");
 				g_game_over = true;
