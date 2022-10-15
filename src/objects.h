@@ -131,6 +131,7 @@ enum obj_type_t
 	OBJ_TREE,
 	OBJ_SLIME,
 	OBJ_CATERPILLAR,
+	OBJ_WATER,
 
 	OBJ_TYPE_NUMBER
 };
@@ -181,5 +182,6 @@ rgb_t obj_foreground_color(oid_t oid);
 char const* obj_text_representation(oid_t oid);
 int obj_text_representation_stretch(oid_t oid);
 rgb_t obj_background_color(oid_t oid);
+bool obj_is_liquid(oid_t oid);
 
 #endif /* WHYCRYSTALS_HEADER_OBJECTS_ */

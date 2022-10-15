@@ -338,6 +338,7 @@ char const* obj_name(oid_t oid)
 		case OBJ_TREE:        return "tree";
 		case OBJ_SLIME:       return "slime";
 		case OBJ_CATERPILLAR: return "caterpillar";
+		case OBJ_WATER:       return "water";
 		default:              return "thing";
 	}
 }
@@ -356,8 +357,6 @@ bool obj_is_blocking(oid_t oid)
 		case OBJ_CATERPILLAR:
 		case OBJ_PLAYER:
 			return true;
-		case OBJ_GRASS:
-		case OBJ_MOSS:
 		default:
 			return false;
 	}
@@ -374,11 +373,6 @@ bool obj_can_get_hit_for_now(oid_t oid)
 		case OBJ_CATERPILLAR:
 		case OBJ_PLAYER:
 			return true;
-		case OBJ_TREE:
-		case OBJ_ROCK:
-		case OBJ_CRYSTAL:
-		case OBJ_GRASS:
-		case OBJ_MOSS:
 		default:
 			return false;
 	}
@@ -398,6 +392,7 @@ int obj_vision_blocking(oid_t oid)
 		case OBJ_CRYSTAL:     return 4;
 		case OBJ_SLIME:       return 2;
 		case OBJ_CATERPILLAR: return 1;
+		case OBJ_WATER:       return 1;
 		default:              return 1;
 	}
 }
@@ -433,6 +428,8 @@ rgb_t obj_foreground_color(oid_t oid)
 			return g_color_dark_green;
 		case OBJ_MOSS:
 			return g_color_dark_green;
+		case OBJ_WATER:
+			return g_color_cyan;
 		default:
 			return g_color_white;
 	}
@@ -453,6 +450,7 @@ char const* obj_text_representation(oid_t oid)
 		case OBJ_CATERPILLAR: return "~";
 		case OBJ_GRASS:       return " v ";
 		case OBJ_MOSS:        return " .. ";
+		case OBJ_WATER:       return "~";
 		default:              return "X";
 	}
 }
@@ -474,6 +472,20 @@ rgb_t obj_background_color(oid_t oid)
 	assert(obj != NULL);
 	switch (obj->type)
 	{
-		default: return g_color_bg;
+		case OBJ_WATER: return g_color_blue;
+		default:        return g_color_bg;
+	}
+}
+
+bool obj_is_liquid(oid_t oid)
+{
+	obj_t* obj = get_obj(oid);
+	assert(obj != NULL);
+	switch (obj->type)
+	{
+		case OBJ_WATER:
+			return true;
+		default:
+			return false;
 	}
 }

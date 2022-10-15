@@ -24,6 +24,7 @@ rgb_t g_color_green =       { 10, 240,  45};
 rgb_t g_color_light_green = { 40, 240,  90};
 rgb_t g_color_dark_green =  { 10, 160,  40};
 rgb_t g_color_cyan =        { 20, 200, 180};
+rgb_t g_color_blue =        { 20,  90, 190};
 
 SDL_Texture* text_to_texture(char const* text, rgba_t color, font_t font)
 {

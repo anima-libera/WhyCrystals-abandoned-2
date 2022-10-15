@@ -43,6 +43,7 @@ extern rgb_t g_color_green;
 extern rgb_t g_color_light_green;
 extern rgb_t g_color_dark_green;
 extern rgb_t g_color_cyan;
+extern rgb_t g_color_blue;
 
 /* Screen coordinates. */
 struct sc_t

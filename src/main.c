@@ -420,7 +420,12 @@ void generate_map(void)
 			}
 		}
 		
-		if (rand() % 5 == 0)
+		if (rand() % 80 == 0)
+		{
+			oid_t oid = obj_create(OBJ_WATER, tc_to_loc(tc));
+			get_obj(oid)->life = 1000;
+		}
+		else if (rand() % 5 == 0)
 		{
 			oid_t oid = obj_create(OBJ_ROCK, tc_to_loc(tc));
 			get_obj(oid)->life = 1000;
@@ -501,6 +506,7 @@ void draw_viewed_tiles(camera_t camera)
 			OBJ_BUSH,
 			OBJ_SLIME,
 			OBJ_CATERPILLAR,
+			OBJ_WATER,
 			OBJ_GRASS,
 			OBJ_MOSS};
 		_Static_assert(sizeof type_priority / sizeof type_priority[0] == OBJ_TYPE_NUMBER,
