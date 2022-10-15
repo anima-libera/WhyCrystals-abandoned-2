@@ -14,6 +14,7 @@ enum font_t
 {
 	FONT_RG,
 	FONT_TL,
+	FONT_TL_SMALL,
 	FONT_NUMBER
 };
 typedef enum font_t font_t;
