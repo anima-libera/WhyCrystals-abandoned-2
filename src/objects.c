@@ -154,7 +154,7 @@ static void obj_unset_loc(oid_t oid)
 	}
 }
 
-oid_t obj_create(obj_type_t type, loc_t loc)
+oid_t obj_create(obj_type_t type, loc_t loc, int max_life)
 {
 	int index;
 	for (int i = 0; i < g_obj_da_len; i++)
@@ -173,7 +173,11 @@ oid_t obj_create(obj_type_t type, loc_t loc)
 	index_found:;
 	obj_entry_t* entry = &g_obj_da[index];
 	obj_t* obj = malloc(sizeof(obj_t));
-	*obj = (obj_t){.type = type, .loc = (loc_t){.type = LOC_NONE}, .life = 1};
+	*obj = (obj_t){
+		.type = type,
+		.loc = (loc_t){.type = LOC_NONE},
+		.life = max_life,
+		.max_life = max_life};
 	entry->obj = obj;
 	entry->used = true;
 	entry->generation++;
@@ -414,7 +418,11 @@ rgb_t obj_foreground_color(oid_t oid)
 		case OBJ_BUSH:
 			return g_color_green;
 		case OBJ_SLIME:
-			if (obj->contained_da.len > 0)
+			if (obj->contained_da.len > 9)
+			{
+				return g_color_red;
+			}
+			else if (obj->contained_da.len > 0)
 			{
 				return g_color_yellow;
 			}

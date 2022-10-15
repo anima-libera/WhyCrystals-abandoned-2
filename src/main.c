@@ -299,7 +299,7 @@ void generate_map(void)
 	tc_t crystal_tc = {
 		.x = g_mg_rect.x + g_mg_rect.w / 4 + rand() % (g_mg_rect.w / 9),
 		.y = g_mg_rect.y + g_mg_rect.h / 3 + rand() % (g_mg_rect.h / 3)};
-	obj_create(OBJ_CRYSTAL, tc_to_loc(crystal_tc));
+	obj_create(OBJ_CRYSTAL, tc_to_loc(crystal_tc), 100);
 
 	/* Generate the path. */
 	int path_try_count = 0;
@@ -422,36 +422,28 @@ void generate_map(void)
 		
 		if (rand() % 80 == 0)
 		{
-			oid_t oid = obj_create(OBJ_WATER, tc_to_loc(tc));
-			get_obj(oid)->life = 1000;
+			obj_create(OBJ_WATER, tc_to_loc(tc), 1000);
 		}
 		else if (rand() % 5 == 0)
 		{
-			oid_t oid = obj_create(OBJ_ROCK, tc_to_loc(tc));
-			get_obj(oid)->life = 1000;
+			obj_create(OBJ_ROCK, tc_to_loc(tc), 1000);
 		}
 		else if (rand() % (neighbor_to_path ? 2 : 5) == 0)
 		{
-			oid_t oid = obj_create(OBJ_TREE, tc_to_loc(tc));
-			get_obj(oid)->life = 100;
+			obj_create(OBJ_TREE, tc_to_loc(tc), 100);
 		}
 		else if (rand() % 3 != 0)
 		{
-			oid_t oid = obj_create(OBJ_GRASS, tc_to_loc(tc));
-			get_obj(oid)->life = 4;
+			obj_create(OBJ_GRASS, tc_to_loc(tc), 4);
 		}
 		else if (rand() % 3 != 0)
 		{
-			oid_t oid = obj_create(OBJ_MOSS, tc_to_loc(tc));
-			get_obj(oid)->life = 2;
+			obj_create(OBJ_MOSS, tc_to_loc(tc), 2);
 		}
 		else if (rand() % 3 != 0)
 		{
-			oid_t oid = obj_create(OBJ_BUSH, tc_to_loc(tc));
-			get_obj(oid)->life = 8;
-
-			oid = obj_create(OBJ_MOSS, tc_to_loc(tc));
-			get_obj(oid)->life = 2;
+			obj_create(OBJ_BUSH, tc_to_loc(tc), 8);
+			obj_create(OBJ_MOSS, tc_to_loc(tc), 2);
 		}
 
 		if (!oid_da_contains_type(&tile->oid_da, OBJ_ROCK) &&
@@ -460,18 +452,27 @@ void generate_map(void)
 		{
 			if (rand() % 20 == 0)
 			{
-				oid_t slime_oid = obj_create(OBJ_SLIME, tc_to_loc(tc));
-				get_obj(slime_oid)->life = 5;
+				oid_t slime_oid = obj_create(OBJ_SLIME, tc_to_loc(tc), 5);
 				if (rand() % 2 == 0)
 				{
-					oid_t content_oid = obj_create(OBJ_CATERPILLAR, inside_obj_loc(slime_oid));
-					get_obj(content_oid)->life = 1;
+					obj_create(OBJ_CATERPILLAR, inside_obj_loc(slime_oid), 1);
 				}
 			}
 			else if (rand() % 50 == 0)
 			{
-				oid_t oid = obj_create(OBJ_CATERPILLAR, tc_to_loc(tc));
-				get_obj(oid)->life = 6;
+				obj_create(OBJ_CATERPILLAR, tc_to_loc(tc), 6);
+			}
+			else if (rand() % 800 == 0)
+			{
+				oid_t main_slime_oid = obj_create(OBJ_SLIME, tc_to_loc(tc), 20);
+				for (int i = 0; i < 10; i++)
+				{
+					oid_t sub_slime_oid = obj_create(OBJ_SLIME, inside_obj_loc(main_slime_oid), 1);
+					for (int j = 0; j < 4; j++)
+					{
+						obj_create(OBJ_SLIME, inside_obj_loc(sub_slime_oid), 1);
+					}
+				}
 			}
 		}
 	}
@@ -676,8 +677,7 @@ int main(void)
 			}
 			tc = new_tc;
 		}
-		g_player_oid = obj_create(OBJ_PLAYER, tc_to_loc(tc));
-		get_obj(g_player_oid)->life = 10;
+		g_player_oid = obj_create(OBJ_PLAYER, tc_to_loc(tc), 10);
 	}
 
 	recompute_vision();
@@ -779,7 +779,31 @@ int main(void)
 				obj_count++;
 				obj_t* obj = get_obj(oid);
 
-				if (obj->type == OBJ_SLIME)
+				if (obj->type == OBJ_CRYSTAL)
+				{
+					for (int i = 0; i < 4; i++)
+					{
+						tm_t tm = TM_ONE_ALL[i];
+						tc_t neighbor_tc = tc_add_tm(loc_tc(obj->loc), tm);
+						tile_t* neighbor_tile = get_tile(neighbor_tc);
+						if (neighbor_tile == NULL)
+						{
+							continue;
+						}
+						for (int i = 0; i < neighbor_tile->oid_da.len; i++)
+						{
+							obj_t* obj = get_obj(neighbor_tile->oid_da.arr[i]);
+							if (obj != NULL)
+							{
+								if (obj->life < obj->max_life)
+								{
+									obj->life++;
+								}
+							}
+						}
+					}
+				}
+				else if (obj->type == OBJ_SLIME)
 				{
 					if (obj->loc.type != LOC_TILE)
 					{

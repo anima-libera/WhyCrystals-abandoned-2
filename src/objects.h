@@ -146,12 +146,13 @@ struct obj_t
 	loc_t loc;
 	oid_da_t contained_da;
 	int life;
+	int max_life;
 
 	visual_effect_obj_da_t visual_effect_da;
 };
 typedef struct obj_t obj_t;
 
-oid_t obj_create(obj_type_t type, loc_t loc);
+oid_t obj_create(obj_type_t type, loc_t loc, int max_life);
 void obj_destroy(oid_t oid);
 obj_t* get_obj(oid_t oid);
 
