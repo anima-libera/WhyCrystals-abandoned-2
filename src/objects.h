@@ -3,6 +3,7 @@
 #define WHYCRYSTALS_HEADER_OBJECTS_
 
 #include "tc.h"
+#include "rendering.h"
 #include <stdbool.h>
 
 /* Section `oid_t`. */
@@ -103,7 +104,8 @@ void visual_effect_obj_da_remove(visual_effect_obj_da_t* da, int index);
 
 struct oid_da_t
 {
-	/* May contain null `oid_t`s. */
+	/* May contain null `oid_t`s.
+	 * Should not be treated as if it is in a particular order. */
 	oid_t* arr;
 	int len, cap;
 };
@@ -129,6 +131,8 @@ enum obj_type_t
 	OBJ_TREE,
 	OBJ_SLIME,
 	OBJ_CATERPILLAR,
+
+	OBJ_TYPE_NUMBER
 };
 typedef enum obj_type_t obj_type_t;
 
@@ -165,6 +169,17 @@ extern oid_t g_player_oid;
 
 oid_t oid_da_find_type(oid_da_t const* da, obj_type_t type);
 bool oid_da_contains_type(oid_da_t const* da, obj_type_t type);
-bool oid_da_contains_type_f(oid_da_t const* da, bool (*f)(obj_type_t type));
+bool oid_da_contains_obj_f(oid_da_t const* da, bool (*f)(oid_t oid));
+
+/* Section dedicated to object properties, behaviors and related systems. */
+
+char const* obj_name(oid_t oid);
+bool obj_is_blocking(oid_t oid);
+bool obj_can_get_hit_for_now(oid_t oid);
+int obj_vision_blocking(oid_t oid);
+rgb_t obj_foreground_color(oid_t oid);
+char const* obj_text_representation(oid_t oid);
+int obj_text_representation_stretch(oid_t oid);
+rgb_t obj_background_color(oid_t oid);
 
 #endif /* WHYCRYSTALS_HEADER_OBJECTS_ */

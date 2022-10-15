@@ -3,6 +3,7 @@
 #include "utils.h"
 #include "objects.h"
 #include "mapgrid.h"
+#include "rendering.h"
 #include <time.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -14,82 +15,6 @@
 
 /* Time since the beginning of the game loop, in milliseconds. */
 int g_game_duration = 0;
-
-int g_window_w = 1200, g_window_h = 600;
-SDL_Window* g_window = NULL;
-SDL_Renderer* g_renderer = NULL;
-
-enum font_t
-{
-	FONT_RG,
-	FONT_TL,
-	FONT_NUMBER
-};
-typedef enum font_t font_t;
-TTF_Font* g_font_table[FONT_NUMBER] = {0};
-
-struct rgb_t
-{
-	uint8_t r, g, b;
-};
-typedef struct rgb_t rgb_t;
-
-struct rgba_t
-{
-	uint8_t r, g, b, a;
-};
-typedef struct rgba_t rgba_t;
-
-rgba_t rgb_to_rgba(rgb_t rgb, uint8_t alpha)
-{
-	return (rgba_t){rgb.r, rgb.g, rgb.b, alpha};
-}
-
-rgb_t g_color_bg_shadow =   {  5,  30,  25};
-rgb_t g_color_bg =          { 10,  40,  35};
-rgb_t g_color_bg_bright =   { 20,  80,  70};
-rgb_t g_color_white =       {180, 220, 200};
-rgb_t g_color_yellow =      {230, 240,  40};
-rgb_t g_color_red =         {230,  40,  35};
-rgb_t g_color_green =       { 10, 240,  45};
-rgb_t g_color_light_green = { 40, 240,  90};
-rgb_t g_color_dark_green =  { 10, 160,  40};
-rgb_t g_color_cyan =        { 20, 200, 180};
-
-/* Screen coordinates. */
-struct sc_t
-{
-	int x, y;
-};
-typedef struct sc_t sc_t;
-
-SDL_Texture* text_to_texture(char const* text, rgba_t color, font_t font)
-{
-	assert(0 <= font && font < FONT_NUMBER);
-	SDL_Color sdl_color = {color.r, color.g, color.b, color.a};
-	SDL_Surface* surface = TTF_RenderText_Solid(g_font_table[font], text, sdl_color);
-	assert(surface != NULL);
-	SDL_Texture* texture = SDL_CreateTextureFromSurface(g_renderer, surface);
-	assert(texture != NULL);
-	SDL_FreeSurface(surface);
-	return texture;
-}
-
-void draw_text_rect(char const* text, rgba_t color, font_t font, SDL_Rect rect)
-{
-	SDL_Texture* texture = text_to_texture(text, color, font);
-	SDL_RenderCopy(g_renderer, texture, NULL, &rect);
-	SDL_DestroyTexture(texture);
-}
-
-void draw_text_sc(char const* text, rgba_t color, font_t font, sc_t sc)
-{
-	SDL_Texture* texture = text_to_texture(text, color, font);
-	SDL_Rect rect = {.x = sc.x, .y = sc.y};
-	SDL_QueryTexture(texture, NULL, NULL, &rect.w, &rect.h);
-	SDL_RenderCopy(g_renderer, texture, NULL, &rect);
-	SDL_DestroyTexture(texture);
-}
 
 int g_turn_number = 0;
 
@@ -224,24 +149,6 @@ void draw_log(void)
 	}
 }
 
-int g_tile_w = 30, g_tile_h = 30;
-
-int obj_type_vision_blocking(obj_type_t type)
-{
-	switch (type)
-	{
-		case OBJ_GRASS:       return 3;
-		case OBJ_BUSH:        return 4;
-		case OBJ_MOSS:        return 1;
-		case OBJ_TREE:        return 8;
-		case OBJ_ROCK:        return 100;
-		case OBJ_CRYSTAL:     return 4;
-		case OBJ_SLIME:       return 2;
-		case OBJ_CATERPILLAR: return 1;
-		default:              return 1;
-	}
-}
-
 void recompute_vision(void)
 {
 	obj_t* player_obj = get_obj(g_player_oid);
@@ -282,35 +189,18 @@ void recompute_vision(void)
 			}
 			for (int i = 0; i < tile->oid_da.len; i++)
 			{
-				obj_t* obj = get_obj(tile->oid_da.arr[i]);
-				if (obj == NULL)
+				oid_t oid = tile->oid_da.arr[i];
+				if (get_obj(oid) == NULL)
 				{
 					continue;
 				}
-				vision -= obj_type_vision_blocking(obj->type);
+				vision -= obj_vision_blocking(oid);
 			}
 			if (vision < 0)
 			{
 				vision = 0;
 			}
 		}
-	}
-}
-
-char const* obj_type_name(obj_type_t type)
-{
-	switch (type)
-	{
-		case OBJ_PLAYER:      return "player";
-		case OBJ_CRYSTAL:     return "crystal";
-		case OBJ_ROCK:        return "rock";
-		case OBJ_GRASS:       return "grass";
-		case OBJ_BUSH:        return "bush";
-		case OBJ_MOSS:        return "moss";
-		case OBJ_TREE:        return "tree";
-		case OBJ_SLIME:       return "slime";
-		case OBJ_CATERPILLAR: return "caterpillar";
-		default:              assert(false); exit(EXIT_FAILURE);
 	}
 }
 
@@ -336,13 +226,13 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 		if (event_visible)
 		{
 			log_text("A %s killed a %s.",
-				obj_type_name(obj_attacker->type), obj_type_name(obj_target->type));
+				obj_name(oid_attacker), obj_name(oid_target));
 		}
 		if (oid_eq(oid_target, g_player_oid))
 		{
 			log_text("Game over.");
 			g_game_over = true;
-			g_game_over_cause = format("Killed by a %s.", obj_type_name(obj_attacker->type));
+			g_game_over_cause = format("Killed by a %s.", obj_name(oid_attacker));
 		}
 		obj_destroy(oid_target);
 	}
@@ -356,7 +246,7 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 		if (event_visible)
 		{
 			log_text("A %s hit a %s.",
-				obj_type_name(obj_attacker->type), obj_type_name(obj_target->type));
+				obj_name(oid_attacker), obj_name(oid_target));
 		}
 	}
 	visual_effect_obj_da_add(&obj_attacker->visual_effect_da, (visual_effect_obj_t){
@@ -366,48 +256,9 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 		.dir = dir});
 }
 
-bool obj_type_is_blocking(obj_type_t type)
-{
-	switch (type)
-	{
-		case OBJ_TREE:
-		case OBJ_ROCK:
-		case OBJ_CRYSTAL:
-		case OBJ_BUSH:
-		case OBJ_SLIME:
-		case OBJ_CATERPILLAR:
-		case OBJ_PLAYER:
-			return true;
-		case OBJ_GRASS:
-		case OBJ_MOSS:
-		default:
-			return false;
-	}
-}
-
-bool obj_type_can_get_hit_for_now(obj_type_t type)
-{
-	switch (type)
-	{
-		case OBJ_BUSH:
-		case OBJ_SLIME:
-		case OBJ_CATERPILLAR:
-		case OBJ_PLAYER:
-			return true;
-		case OBJ_TREE:
-		case OBJ_ROCK:
-		case OBJ_CRYSTAL:
-		case OBJ_GRASS:
-		case OBJ_MOSS:
-		default:
-			return false;
-	}
-}
-
 void obj_try_move(oid_t oid, tm_t move)
 {
-	obj_t* moving_obj = get_obj(oid);
-	assert(moving_obj != NULL);
+	assert(get_obj(oid) != NULL);
 	tc_t dst_tc = tc_add_tm(loc_tc(get_obj(oid)->loc), move);
 	tile_t* dst_tile = get_tile(dst_tc);
 	if (dst_tile == NULL)
@@ -423,12 +274,12 @@ void obj_try_move(oid_t oid, tm_t move)
 		{
 			continue;
 		}
-		else if (obj_type_can_get_hit_for_now(obj_on_dst->type))
+		else if (obj_can_get_hit_for_now(oid_on_dst))
 		{
 			obj_hits_obj(oid, oid_on_dst);
 			return;
 		}
-		else if (obj_type_is_blocking(moving_obj->type) && obj_type_is_blocking(obj_on_dst->type))
+		else if (obj_is_blocking(oid) && obj_is_blocking(oid_on_dst))
 		{
 			return;
 		}
@@ -621,6 +472,141 @@ void generate_map(void)
 	}
 }
 
+void draw_viewed_tiles(camera_t camera)
+{
+	/* Pass 0 draws the background of all the viewed tiles,
+	 * then pass 1 draws the foreground of all the viewed tiles. */
+	for (int pass = 0; pass < 2; pass++)
+	for (int y = 0; y < g_mg_rect.h; y++)
+	for (int x = 0; x < g_mg_rect.w; x++)
+	{
+		tc_t tc = {x, y};
+		tile_t const* tile = get_tile(tc);
+		if (tile->vision <= 0)
+		{
+			continue;
+		}
+
+		SDL_Rect base_rect = camera_tc_rect(camera, tc);
+		SDL_Rect rect = {base_rect.x, base_rect.y, base_rect.w, base_rect.h};
+
+		/* The tile may contain multiple objects.
+		 * One is to be chosen to be drawn (and the others ignored). */
+		oid_t oid = OID_NULL;
+		obj_type_t type_priority[] = {
+			OBJ_PLAYER,
+			OBJ_CRYSTAL,
+			OBJ_ROCK,
+			OBJ_TREE,
+			OBJ_BUSH,
+			OBJ_SLIME,
+			OBJ_CATERPILLAR,
+			OBJ_GRASS,
+			OBJ_MOSS};
+		_Static_assert(sizeof type_priority / sizeof type_priority[0] == OBJ_TYPE_NUMBER,
+			"Some object types have not been added to the drawing priority list.");
+		for (int i = 0; i < (int)(sizeof type_priority / sizeof type_priority[0]); i++)
+		{
+			oid = oid_da_find_type(&tile->oid_da, type_priority[i]);
+			if (get_obj(oid) == NULL)
+			{
+				oid = OID_NULL;
+			}
+			if (!oid_eq(oid, OID_NULL))
+			{
+				break;
+			}
+		}
+
+		char const* text = " ";
+		int text_stretch = 0;
+		rgb_t text_color = g_color_white;
+		font_t text_font = FONT_RG;
+		rgb_t bg_color = g_color_bg;
+
+		if (!oid_eq(oid, OID_NULL))
+		{
+			text = obj_text_representation(oid);
+			text_stretch = obj_text_representation_stretch(oid);
+			text_color = obj_foreground_color(oid);
+			bg_color = obj_background_color(oid);
+		}
+		
+		if (tile->is_path)
+		{
+			bg_color = g_color_bg_bright;
+		}
+
+		if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT])
+		{
+			if (tile->vision > 0)
+			{
+				bg_color = (rgb_t){
+					min(255, tile->vision * 30),
+					max(0, min(255, tile->vision * 30 - 255)),
+					0};
+			}
+			else
+			{
+				bg_color = (rgb_t){0, 0, 0};
+			}
+		}
+
+		obj_t* obj = get_obj(oid);
+		if (obj != NULL)
+		{
+			for (int i = 0; i < obj->visual_effect_da.len; i++)
+			{
+				visual_effect_obj_t* ve = &obj->visual_effect_da.arr[i];
+				if (g_game_duration > ve->time_end)
+				{
+					visual_effect_obj_da_remove(&obj->visual_effect_da, i);
+					continue;
+				}
+				if (ve->type == VISUAL_EFFECT_OBJ_NONE)
+				{
+					continue;
+				}
+				if (ve->type != VISUAL_EFFECT_OBJ_NONE)
+				{
+					int t = g_game_duration - ve->time_begin;
+					int t_max = ve->time_end - ve->time_begin;
+
+					if (ve->type == VISUAL_EFFECT_OBJ_DAMAGED)
+					{
+						text_color = g_color_red;
+
+						tc_t src = tc_add_tm(tc, ve->dir);
+						SDL_Rect src_rect = camera_tc_rect(camera, src);
+						rect.x = interpolate(t + 40, t_max + 40, src_rect.x, rect.x);
+						rect.y = interpolate(t + 40, t_max + 40, src_rect.y, rect.y);
+					}
+					else if (ve->type == VISUAL_EFFECT_OBJ_MOVE ||
+						ve->type == VISUAL_EFFECT_OBJ_ATTACK)
+					{
+						tc_t src = tc_add_tm(tc, ve->dir);
+						SDL_Rect src_rect = camera_tc_rect(camera, src);
+						rect.x = interpolate(t, t_max, src_rect.x, rect.x);
+						rect.y = interpolate(t, t_max, src_rect.y, rect.y);
+					}
+				}
+			}
+		}
+
+		if (pass == 0)
+		{
+			SDL_SetRenderDrawColor(g_renderer, bg_color.r, bg_color.g, bg_color.b, 255);
+			SDL_RenderFillRect(g_renderer, &base_rect);
+		}
+		else
+		{
+			rect.y -= 5 + text_stretch;
+			rect.h += 10 + text_stretch + text_stretch / 3;
+			draw_text_rect(text, rgb_to_rgba(text_color, 255), text_font, rect);
+		}
+	}
+}
+
 int main(void)
 {
 	srand(time(NULL));
@@ -675,7 +661,7 @@ int main(void)
 	{
 		/* Place the player on a tile that does not contains blocking objects. */
 		tc_t tc = {g_mg_rect.w / 2, g_mg_rect.h / 2};
-		while (oid_da_contains_type_f(&get_tile(tc)->oid_da, obj_type_is_blocking))
+		while (oid_da_contains_obj_f(&get_tile(tc)->oid_da, obj_is_blocking))
 		{
 			tc_t new_tc = tc_add_tm(tc, rand_tm_one());
 			while (get_tile(new_tc) == NULL)
@@ -690,9 +676,8 @@ int main(void)
 
 	recompute_vision();
 	
-	float camera_x, camera_y;
-	camera_x = ((float)g_mg_rect.w / 2.0f) * (float)g_tile_w + 0.5f * (float)g_tile_w;
-	camera_y = ((float)g_mg_rect.h / 2.0f) * (float)g_tile_h + 0.5f * (float)g_tile_h;
+	camera_t camera;
+	camera_set(&camera, loc_tc(get_obj(g_player_oid)->loc));
 
 	int obj_count = 0;
 
@@ -708,7 +693,7 @@ int main(void)
 		int start_iteration_time = SDL_GetTicks();
 		g_game_duration = start_iteration_time - start_loop_time;
 
-		bool perform_turn = false;
+		bool must_perform_turn = false;
 
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
@@ -752,7 +737,7 @@ int main(void)
 										continue;
 									}
 									g_player_oid = oid;
-									perform_turn = true;
+									must_perform_turn = true;
 									log_text("Possessing somthing somewhere.");
 									break;
 								}
@@ -771,7 +756,7 @@ int main(void)
 							{
 								tm_t dir = tm_from_arrow_key(event.key.keysym.sym);
 								obj_try_move(g_player_oid, dir);
-								perform_turn = true;
+								must_perform_turn = true;
 							}
 						break;
 					}
@@ -779,7 +764,7 @@ int main(void)
 			}
 		}
 
-		if (perform_turn)
+		if (must_perform_turn)
 		{
 			obj_count = 0;
 			oid_t oid = OID_NULL;
@@ -840,182 +825,19 @@ int main(void)
 			log_seperator();
 		}
 
-		/* Move the camera (smoothly) to keep the player centered. */
-		{
-			obj_t* player_obj = get_obj(g_player_oid);
-			if (player_obj != NULL)
-			{
-				tc_t player_tc = loc_tc(player_obj->loc);
-				float const target_camera_x =
-					(float)player_tc.x * (float)g_tile_w + 0.5f * (float)g_tile_w;
-				float const target_camera_y =
-					(float)player_tc.y * (float)g_tile_h + 0.5f * (float)g_tile_h;
-				float const camera_speed = 0.035f;
-				camera_x += (target_camera_x - camera_x) * camera_speed;
-				camera_y += (target_camera_y - camera_y) * camera_speed;
-			}
-		}
-
 		SDL_SetRenderDrawColor(g_renderer,
 			g_color_bg_shadow.r, g_color_bg_shadow.g, g_color_bg_shadow.b, 255);
 		SDL_RenderClear(g_renderer);
 
-		for (int pass = 0; pass < 2; pass++)
-		for (int y = 0; y < g_mg_rect.h; y++)
-		for (int x = 0; x < g_mg_rect.w; x++)
 		{
-			tc_t tc = {x, y};
-			SDL_Rect base_rect = {
-				x * g_tile_w + g_window_w / 2 - (int)camera_x,
-				y * g_tile_h + g_window_h / 2 - (int)camera_y,
-				g_tile_w, g_tile_h};
-			SDL_Rect rect = {base_rect.x, base_rect.y, base_rect.w, base_rect.h};
-
-			tile_t const* tile = get_tile(tc);
-
-			char* text = " ";
-			int text_stretch = 0;
-			rgb_t text_color = g_color_white;
-			font_t text_font = FONT_RG;
-			rgb_t bg_color = g_color_bg;
-			if (oid_da_contains_type(&tile->oid_da, OBJ_PLAYER))
+			obj_t* player_obj = get_obj(g_player_oid);
+			if (player_obj != NULL)
 			{
-				text = "@";
-				text_color = g_color_yellow;
-			}
-			else if (oid_da_contains_type(&tile->oid_da, OBJ_CRYSTAL))
-			{
-				text = "A";
-				text_color = g_color_red;
-			}
-			else if (oid_da_contains_type(&tile->oid_da, OBJ_ROCK))
-			{
-				text = "#";
-				text_color = g_color_white;
-			}
-			else if (oid_da_contains_type(&tile->oid_da, OBJ_TREE))
-			{
-				text = "Y";
-				text_color = g_color_light_green;
-			}
-			else if (oid_da_contains_type(&tile->oid_da, OBJ_BUSH))
-			{
-				text = "n";
-				text_stretch = 10;
-				text_color = g_color_green;
-			}
-			else if (oid_da_contains_type(&tile->oid_da, OBJ_SLIME))
-			{
-				text = "o";
-				text_color = g_color_cyan;
-				if (get_obj(oid_da_find_type(&tile->oid_da, OBJ_SLIME))->contained_da.len > 0)
-				{
-					text_color = g_color_yellow;
-				}
-			}
-			else if (oid_da_contains_type(&tile->oid_da, OBJ_CATERPILLAR))
-			{
-				text = "~";
-				text_color = g_color_yellow;
-			}
-			else if (oid_da_contains_type(&tile->oid_da, OBJ_GRASS))
-			{
-				text = " v ";
-				text_color = g_color_dark_green;
-			}
-			else if (oid_da_contains_type(&tile->oid_da, OBJ_MOSS))
-			{
-				text = " .. ";
-				text_color = g_color_dark_green;
-			}
-			
-			if (tile->is_path)
-			{
-				bg_color = g_color_bg_bright;
-			}
-
-			if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LALT])
-			{
-				if (tile->vision > 0)
-				{
-					bg_color = (rgb_t){
-						min(255, tile->vision * 30),
-						max(0, min(255, tile->vision * 30 - 255)),
-						0};
-				}
-				else
-				{
-					bg_color = (rgb_t){0, 0, 0};
-				}
-			}
-			if (tile->vision <= 0)
-			{
-				continue;
-			}
-
-			for (int i_obj = 0; i_obj < tile->oid_da.len; i_obj++)
-			{
-				obj_t* obj = get_obj(tile->oid_da.arr[i_obj]);
-				if (obj == NULL)
-				{
-					continue;
-				}
-				for (int i = 0; i < obj->visual_effect_da.len; i++)
-				{
-					visual_effect_obj_t* ve = &obj->visual_effect_da.arr[i];
-					if (g_game_duration > ve->time_end)
-					{
-						visual_effect_obj_da_remove(&obj->visual_effect_da, i);
-						continue;
-					}
-					if (ve->type == VISUAL_EFFECT_OBJ_NONE)
-					{
-						continue;
-					}
-					if (ve->type != VISUAL_EFFECT_OBJ_NONE)
-					{
-						int t = g_game_duration - ve->time_begin;
-						int t_max = ve->time_end - ve->time_begin;
-
-						if (ve->type == VISUAL_EFFECT_OBJ_DAMAGED)
-						{
-							text_color = g_color_red;
-
-							tc_t src = tc_add_tm(tc, ve->dir);
-							SDL_Rect src_rect = {
-								src.x * g_tile_w + g_window_w / 2 - (int)camera_x,
-								src.y * g_tile_h + g_window_h / 2 - (int)camera_y,
-								g_tile_w, g_tile_h};
-							rect.x = interpolate(t + 40, t_max + 40, src_rect.x, rect.x);
-							rect.y = interpolate(t + 40, t_max + 40, src_rect.y, rect.y);
-						}
-						else if (ve->type == VISUAL_EFFECT_OBJ_MOVE ||
-							ve->type == VISUAL_EFFECT_OBJ_ATTACK)
-						{
-							tc_t src = tc_add_tm(tc, ve->dir);
-							SDL_Rect src_rect = {
-								src.x * g_tile_w + g_window_w / 2 - (int)camera_x,
-								src.y * g_tile_h + g_window_h / 2 - (int)camera_y,
-								g_tile_w, g_tile_h};
-							rect.x = interpolate(t, t_max, src_rect.x, rect.x);
-							rect.y = interpolate(t, t_max, src_rect.y, rect.y);
-						}
-					}
-				}
-			}
-
-			if (pass == 0)
-			{
-				SDL_SetRenderDrawColor(g_renderer, bg_color.r, bg_color.g, bg_color.b, 255);
-				SDL_RenderFillRect(g_renderer, &base_rect);
-			}
-			else
-			{
-				rect.y -= 5 + text_stretch;
-				rect.h += 10 + text_stretch + text_stretch / 3;
-				draw_text_rect(text, rgb_to_rgba(text_color, 255), text_font, rect);
+				camera_move_smoothly(&camera, loc_tc(player_obj->loc), 0.035f);
 			}
 		}
+
+		draw_viewed_tiles(camera);
 
 		/* Display some information in a corner. */
 		{

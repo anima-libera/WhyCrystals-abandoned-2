@@ -236,6 +236,10 @@ void obj_destroy(oid_t oid)
 obj_t* get_obj(oid_t oid)
 {
 	assert_oid_makes_sens(oid);
+	if (oid_eq(oid, OID_NULL))
+	{
+		return NULL;
+	}
 	obj_entry_t* entry = &g_obj_da[oid.index];
 	if (entry->used && entry->generation == oid.generation)
 	{
@@ -304,15 +308,172 @@ bool oid_da_contains_type(oid_da_t const* da, obj_type_t type)
 	return !oid_eq(oid_da_find_type(da, type), OID_NULL);
 }
 
-bool oid_da_contains_type_f(oid_da_t const* da, bool (*f)(obj_type_t type))
+bool oid_da_contains_obj_f(oid_da_t const* da, bool (*f)(oid_t oid))
 {
 	for (int i = 0; i < da->len; i++)
 	{
-		obj_t* obj = get_obj(da->arr[i]);
-		if (obj != NULL && f(obj->type))
+		oid_t oid = da->arr[i];
+		if (get_obj(oid) != NULL && f(oid))
 		{
 			return true;
 		}
 	}
 	return false;
+}
+
+/* Section dedicated to object properties, behaviors and related systems. */
+
+char const* obj_name(oid_t oid)
+{
+	obj_t* obj = get_obj(oid);
+	assert(obj != NULL);
+	switch (obj->type)
+	{
+		case OBJ_PLAYER:      return "player";
+		case OBJ_CRYSTAL:     return "crystal";
+		case OBJ_ROCK:        return "rock";
+		case OBJ_GRASS:       return "grass";
+		case OBJ_BUSH:        return "bush";
+		case OBJ_MOSS:        return "moss";
+		case OBJ_TREE:        return "tree";
+		case OBJ_SLIME:       return "slime";
+		case OBJ_CATERPILLAR: return "caterpillar";
+		default:              return "thing";
+	}
+}
+
+bool obj_is_blocking(oid_t oid)
+{
+	obj_t* obj = get_obj(oid);
+	assert(obj != NULL);
+	switch (obj->type)
+	{
+		case OBJ_TREE:
+		case OBJ_ROCK:
+		case OBJ_CRYSTAL:
+		case OBJ_BUSH:
+		case OBJ_SLIME:
+		case OBJ_CATERPILLAR:
+		case OBJ_PLAYER:
+			return true;
+		case OBJ_GRASS:
+		case OBJ_MOSS:
+		default:
+			return false;
+	}
+}
+
+bool obj_can_get_hit_for_now(oid_t oid)
+{
+	obj_t* obj = get_obj(oid);
+	assert(obj != NULL);
+	switch (obj->type)
+	{
+		case OBJ_BUSH:
+		case OBJ_SLIME:
+		case OBJ_CATERPILLAR:
+		case OBJ_PLAYER:
+			return true;
+		case OBJ_TREE:
+		case OBJ_ROCK:
+		case OBJ_CRYSTAL:
+		case OBJ_GRASS:
+		case OBJ_MOSS:
+		default:
+			return false;
+	}
+}
+
+int obj_vision_blocking(oid_t oid)
+{
+	obj_t* obj = get_obj(oid);
+	assert(obj != NULL);
+	switch (obj->type)
+	{
+		case OBJ_GRASS:       return 3;
+		case OBJ_BUSH:        return 4;
+		case OBJ_MOSS:        return 1;
+		case OBJ_TREE:        return 8;
+		case OBJ_ROCK:        return 100;
+		case OBJ_CRYSTAL:     return 4;
+		case OBJ_SLIME:       return 2;
+		case OBJ_CATERPILLAR: return 1;
+		default:              return 1;
+	}
+}
+
+rgb_t obj_foreground_color(oid_t oid)
+{
+	obj_t* obj = get_obj(oid);
+	assert(obj != NULL);
+	switch (obj->type)
+	{
+		case OBJ_PLAYER:
+			return g_color_yellow;
+		case OBJ_CRYSTAL:
+			return g_color_red;
+		case OBJ_ROCK:
+			return g_color_white;
+		case OBJ_TREE:
+			return g_color_light_green;
+		case OBJ_BUSH:
+			return g_color_green;
+		case OBJ_SLIME:
+			if (obj->contained_da.len > 0)
+			{
+				return g_color_yellow;
+			}
+			else
+			{
+				return g_color_cyan;
+			}
+		case OBJ_CATERPILLAR:
+			return g_color_yellow;
+		case OBJ_GRASS:
+			return g_color_dark_green;
+		case OBJ_MOSS:
+			return g_color_dark_green;
+		default:
+			return g_color_white;
+	}
+}
+
+char const* obj_text_representation(oid_t oid)
+{
+	obj_t* obj = get_obj(oid);
+	assert(obj != NULL);
+	switch (obj->type)
+	{
+		case OBJ_PLAYER:      return "@";
+		case OBJ_CRYSTAL:     return "A";
+		case OBJ_ROCK:        return "#";
+		case OBJ_TREE:        return "Y";
+		case OBJ_BUSH:        return "n";
+		case OBJ_SLIME:       return "o";
+		case OBJ_CATERPILLAR: return "~";
+		case OBJ_GRASS:       return " v ";
+		case OBJ_MOSS:        return " .. ";
+		default:              return "X";
+	}
+}
+
+int obj_text_representation_stretch(oid_t oid)
+{
+	obj_t* obj = get_obj(oid);
+	assert(obj != NULL);
+	switch (obj->type)
+	{
+		case OBJ_BUSH: return 10;
+		default:       return 0;
+	}
+}
+
+rgb_t obj_background_color(oid_t oid)
+{
+	obj_t* obj = get_obj(oid);
+	assert(obj != NULL);
+	switch (obj->type)
+	{
+		default: return g_color_bg;
+	}
 }
