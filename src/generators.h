@@ -23,4 +23,23 @@ oid_t obj_generate(obj_gen_t* gen, loc_t loc);
 
 obj_gen_t obj_gen_generate(void);
 
+/* Section `biome_gen_t`. */
+
+struct gen_probabilities_t
+{
+	obj_gen_t gen;
+	int probability;
+};
+typedef struct gen_probabilities_t gen_probabilities_t;
+
+struct biome_gen_t
+{
+	gen_probabilities_t* gen_probabilities;
+	int gen_number;
+	int probability_sum;
+};
+typedef struct biome_gen_t biome_gen_t;
+
+biome_gen_t biome_gen_generate(void);
+
 #endif /* WHYCRYSTALS_HEADER_GENERATORS_ */

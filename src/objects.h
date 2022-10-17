@@ -190,5 +190,6 @@ char const* obj_text_representation(oid_t oid);
 int obj_text_representation_stretch(oid_t oid);
 rgb_t obj_background_color(oid_t oid);
 bool obj_is_liquid(oid_t oid);
+bool obj_moves_on_its_own(oid_t oid);
 
 #endif /* WHYCRYSTALS_HEADER_OBJECTS_ */

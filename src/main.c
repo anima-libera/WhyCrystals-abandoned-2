@@ -164,7 +164,7 @@ void obj_try_move(oid_t oid, tm_t move)
 		.dir = tm_reverse(move)});
 }
 
-void generate_map(void)
+void generate_map_path(void)
 {
 	tc_t crystal_tc = {
 		.x = g_mg_rect.x + g_mg_rect.w / 4 + rand() % (g_mg_rect.w / 9),
@@ -196,7 +196,11 @@ void generate_map(void)
 			tc = tc_add_tm(tc, direction);
 			same_direction_steps++;
 
-			if (same_direction_steps >= 1 && rand() % (same_direction_steps == 1 ? 6 : 2) == 0)
+			int keep_direction_force =
+				same_direction_steps == 1 ? 6 :
+				direction.x != 0 ? 4 :
+				2;
+			if (same_direction_steps >= 1 && rand() % keep_direction_force == 0)
 			{
 				/* Change the direction. */
 				tm_t new_direction = rand_tm_one();
@@ -235,6 +239,7 @@ void generate_map(void)
 				}				
 			}
 		}
+		#if 0
 		/* Making sure that the path touches the right part of the map. */
 		bool path_touches_right_edge = false;
 		for (int y = 0; y < g_mg_rect.h; y++)
@@ -251,6 +256,7 @@ void generate_map(void)
 		{
 			goto path_invalid;
 		}
+		#endif
 
 		/* The generated path was validated. */
 		break;
@@ -267,22 +273,16 @@ void generate_map(void)
 		}
 	}
 	printf("Path generation try count: %d\n", path_try_count);
+}
 
-	struct gen_probabilities_t
+void generate_map(void)
+{
+	generate_map_path();
+
+	biome_gen_t biome_gens[9];
+	for (int i = 0; i < (int)(sizeof biome_gens / sizeof biome_gens[0]); i++)
 	{
-		obj_gen_t gen;
-		int probability;
-	};
-	typedef struct gen_probabilities_t gen_probabilities_t;
-	gen_probabilities_t genps[10];
-	int probability_sum = 0;
-	for (int i = 0; i < (int)(sizeof genps / sizeof genps[0]); i++)
-	{
-		int probability = rand() % 100 + 1;
-		probability_sum += probability;
-		genps[i] = (gen_probabilities_t){
-			.gen = obj_gen_generate(),
-			.probability = probability};
+		biome_gens[i] = biome_gen_generate();
 	}
 
 	for (int y = 0; y < g_mg_rect.h; y++)
@@ -307,19 +307,27 @@ void generate_map(void)
 			}
 		}
 
+		biome_gen_t* biome_gen = &biome_gens[
+			((tc.y * 3) / g_mg_rect.h) * 3 + (tc.x * 3) / g_mg_rect.w];
+
 		obj_gen_t* gen = NULL;
-		int r = rand() % probability_sum;
-		for (int i = 0; i < (int)(sizeof genps / sizeof genps[0]); i++)
+		int r = rand() % biome_gen->probability_sum;
+		for (int i = 0; i < biome_gen->gen_number; i++)
 		{
-			r -= genps[i].probability;
+			r -= biome_gen->gen_probabilities[i].probability;
 			if (r < 0)
 			{
-				gen = &genps[i].gen;
+				gen = &biome_gen->gen_probabilities[i].gen;
 				break;
 			}
 		}
 
-		obj_generate(gen, tc_to_loc(tc));
+		oid_t oid = obj_generate(gen, tc_to_loc(tc));
+
+		if (obj_moves_on_its_own(oid))
+		{
+			obj_create(OBJ_MOSS, tc_to_loc(tc), 1, rand_material());
+		}
 
 		#if 0
 		if (rand() % 80 == 0)
@@ -574,8 +582,8 @@ int main(void)
 	g_font_table[FONT_TL_SMALL] = TTF_OpenFontRW(rwops_font, 0, 15);
 	assert(g_font_table[FONT_TL_SMALL] != NULL);
 
-	g_mg_rect.w = 60;
-	g_mg_rect.h = 60;
+	g_mg_rect.w = 100;
+	g_mg_rect.h = 100;
 	g_mg = malloc(g_mg_rect.w * g_mg_rect.h * sizeof(tile_t));
 
 	for (int y = 0; y < g_mg_rect.h; y++)

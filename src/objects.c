@@ -544,3 +544,17 @@ bool obj_is_liquid(oid_t oid)
 			return false;
 	}
 }
+
+bool obj_moves_on_its_own(oid_t oid)
+{
+	obj_t* obj = get_obj(oid);
+	assert(obj != NULL);
+	switch (obj->type)
+	{
+		case OBJ_SLIME:
+		case OBJ_CATERPILLAR:
+			return true;
+		default:
+			return false;
+	}
+}

@@ -36,3 +36,22 @@ obj_gen_t obj_gen_generate(void)
 		.rare_material_probability = rare_material_probability,
 	};
 }
+
+/* Section `biome_gen_t`. */
+
+biome_gen_t biome_gen_generate(void)
+{
+	biome_gen_t biome_gen = {0};
+	biome_gen.gen_number = 10;
+	biome_gen.gen_probabilities =
+		malloc(biome_gen.gen_number * sizeof biome_gen.gen_probabilities[0]);
+	for (int i = 0; i < biome_gen.gen_number; i++)
+	{
+		int probability = rand() % 100 + 1;
+		biome_gen.probability_sum += probability;
+		biome_gen.gen_probabilities[i] = (gen_probabilities_t){
+			.gen = obj_gen_generate(),
+			.probability = probability};
+	}
+	return biome_gen;
+}
