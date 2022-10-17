@@ -4,6 +4,7 @@
 
 #include "tc.h"
 #include "rendering.h"
+#include "game.h"
 #include <stdbool.h>
 
 /* Section `oid_t`. */
@@ -62,6 +63,8 @@ struct loc_t
 	};
 };
 typedef struct loc_t loc_t;
+
+char* loc_to_text_allocated(loc_t loc);
 
 tc_t loc_tc(loc_t loc);
 loc_t tc_to_loc(tc_t tc);
@@ -137,6 +140,8 @@ enum obj_type_t
 };
 typedef enum obj_type_t obj_type_t;
 
+char const* obj_type_name(obj_type_t type);
+
 /* An object of the game.
  * Pretty much everything that physically exists
  * in the world is or should be an object. */
@@ -147,12 +152,13 @@ struct obj_t
 	oid_da_t contained_da;
 	int life;
 	int max_life;
+	material_id_t material_id;
 
 	visual_effect_obj_da_t visual_effect_da;
 };
 typedef struct obj_t obj_t;
 
-oid_t obj_create(obj_type_t type, loc_t loc, int max_life);
+oid_t obj_create(obj_type_t type, loc_t loc, int max_life, material_id_t material_id);
 void obj_destroy(oid_t oid);
 obj_t* get_obj(oid_t oid);
 

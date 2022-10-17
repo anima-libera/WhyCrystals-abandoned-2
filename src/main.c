@@ -6,6 +6,7 @@
 #include "rendering.h"
 #include "log.h"
 #include "game.h"
+#include "generators.h"
 #include <time.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -168,7 +169,7 @@ void generate_map(void)
 	tc_t crystal_tc = {
 		.x = g_mg_rect.x + g_mg_rect.w / 4 + rand() % (g_mg_rect.w / 9),
 		.y = g_mg_rect.y + g_mg_rect.h / 3 + rand() % (g_mg_rect.h / 3)};
-	obj_create(OBJ_CRYSTAL, tc_to_loc(crystal_tc), 100);
+	obj_create(OBJ_CRYSTAL, tc_to_loc(crystal_tc), 100, rand_material());
 
 	/* Generate the path. */
 	int path_try_count = 0;
@@ -267,6 +268,23 @@ void generate_map(void)
 	}
 	printf("Path generation try count: %d\n", path_try_count);
 
+	struct gen_probabilities_t
+	{
+		obj_gen_t gen;
+		int probability;
+	};
+	typedef struct gen_probabilities_t gen_probabilities_t;
+	gen_probabilities_t genps[10];
+	int probability_sum = 0;
+	for (int i = 0; i < (int)(sizeof genps / sizeof genps[0]); i++)
+	{
+		int probability = rand() % 100 + 1;
+		probability_sum += probability;
+		genps[i] = (gen_probabilities_t){
+			.gen = obj_gen_generate(),
+			.probability = probability};
+	}
+
 	for (int y = 0; y < g_mg_rect.h; y++)
 	for (int x = 0; x < g_mg_rect.w; x++)
 	{
@@ -288,31 +306,53 @@ void generate_map(void)
 				break;
 			}
 		}
-		
+
+		obj_gen_t* gen = NULL;
+		int r = rand() % probability_sum;
+		for (int i = 0; i < (int)(sizeof genps / sizeof genps[0]); i++)
+		{
+			r -= genps[i].probability;
+			if (r < 0)
+			{
+				gen = &genps[i].gen;
+				break;
+			}
+		}
+
+		obj_generate(gen, tc_to_loc(tc));
+
+		#if 0
 		if (rand() % 80 == 0)
 		{
-			obj_create(OBJ_WATER, tc_to_loc(tc), 1000);
+			obj_create(OBJ_WATER, tc_to_loc(tc),
+				1000, rand_material());
 		}
 		else if (rand() % 5 == 0)
 		{
-			obj_create(OBJ_ROCK, tc_to_loc(tc), 1000);
+			obj_create(OBJ_ROCK, tc_to_loc(tc),
+				1000, rand_material());
 		}
 		else if (rand() % (neighbor_to_path ? 2 : 5) == 0)
 		{
-			obj_create(OBJ_TREE, tc_to_loc(tc), 100);
+			obj_create(OBJ_TREE, tc_to_loc(tc),
+				100, rand_material());
 		}
 		else if (rand() % 3 != 0)
 		{
-			obj_create(OBJ_GRASS, tc_to_loc(tc), 4);
+			obj_create(OBJ_GRASS, tc_to_loc(tc),
+				4, rand_material());
 		}
 		else if (rand() % 3 != 0)
 		{
-			obj_create(OBJ_MOSS, tc_to_loc(tc), 2);
+			obj_create(OBJ_MOSS, tc_to_loc(tc),
+				2, rand_material());
 		}
 		else if (rand() % 3 != 0)
 		{
-			obj_create(OBJ_BUSH, tc_to_loc(tc), 8);
-			obj_create(OBJ_MOSS, tc_to_loc(tc), 2);
+			obj_create(OBJ_BUSH, tc_to_loc(tc),
+				8, rand_material());
+			obj_create(OBJ_MOSS, tc_to_loc(tc),
+				2, rand_material());
 		}
 
 		if (!oid_da_contains_type(&tile->oid_da, OBJ_ROCK) &&
@@ -321,29 +361,36 @@ void generate_map(void)
 		{
 			if (rand() % 20 == 0)
 			{
-				oid_t slime_oid = obj_create(OBJ_SLIME, tc_to_loc(tc), 5);
+				oid_t slime_oid = obj_create(OBJ_SLIME, tc_to_loc(tc),
+					5, rand_material());
 				if (rand() % 2 == 0)
 				{
-					obj_create(OBJ_CATERPILLAR, inside_obj_loc(slime_oid), 1);
+					obj_create(OBJ_CATERPILLAR, inside_obj_loc(slime_oid),
+						1, rand_material());
 				}
 			}
 			else if (rand() % 50 == 0)
 			{
-				obj_create(OBJ_CATERPILLAR, tc_to_loc(tc), 6);
+				obj_create(OBJ_CATERPILLAR, tc_to_loc(tc),
+					6, rand_material());
 			}
 			else if (rand() % 800 == 0)
 			{
-				oid_t main_slime_oid = obj_create(OBJ_SLIME, tc_to_loc(tc), 20);
+				oid_t main_slime_oid = obj_create(OBJ_SLIME, tc_to_loc(tc),
+					20, rand_material());
 				for (int i = 0; i < 10; i++)
 				{
-					oid_t sub_slime_oid = obj_create(OBJ_SLIME, inside_obj_loc(main_slime_oid), 1);
+					oid_t sub_slime_oid = obj_create(OBJ_SLIME, inside_obj_loc(main_slime_oid),
+						1, rand_material());
 					for (int j = 0; j < 4; j++)
 					{
-						obj_create(OBJ_SLIME, inside_obj_loc(sub_slime_oid), 1);
+						obj_create(OBJ_SLIME, inside_obj_loc(sub_slime_oid),
+							1, rand_material());
 					}
 				}
 			}
 		}
+		#endif
 	}
 }
 
@@ -539,6 +586,8 @@ int main(void)
 		*tile = (tile_t){0};
 	}
 
+	generate_some_materials();
+
 	generate_map();
 
 	{
@@ -553,7 +602,8 @@ int main(void)
 			}
 			tc = new_tc;
 		}
-		g_player_oid = obj_create(OBJ_PLAYER, tc_to_loc(tc), 10);
+		g_player_oid = obj_create(OBJ_PLAYER, tc_to_loc(tc),
+			10, rand_material());
 	}
 
 	recompute_vision();
@@ -625,6 +675,19 @@ int main(void)
 								}
 							}
 						break;
+						case SDLK_o:
+							/* Object key (for debugging purposes). */
+							{
+								obj_t* player_obj = get_obj(g_player_oid);
+								if (player_obj != NULL)
+								{
+									obj_create(OBJ_MOSS, player_obj->loc,
+										1, rand_material());
+									must_perform_turn = true;
+									log_text("Created moss.");
+								}
+							}
+						break;
 						case SDLK_KP_PLUS:
 						case SDLK_KP_MINUS:
 							g_tile_w += 5 * (event.key.keysym.sym == SDLK_KP_PLUS ? 1 : -1);
@@ -638,6 +701,12 @@ int main(void)
 							{
 								tm_t dir = tm_from_arrow_key(event.key.keysym.sym);
 								obj_try_move(g_player_oid, dir);
+								must_perform_turn = true;
+							}
+						break;
+						case SDLK_KP_0:
+							if (!g_game_over)
+							{
 								must_perform_turn = true;
 							}
 						break;

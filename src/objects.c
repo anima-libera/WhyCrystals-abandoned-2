@@ -2,6 +2,7 @@
 #include "objects.h"
 #include "mapgrid.h"
 #include "utils.h"
+#include "log.h"
 #include <limits.h>
 #include <assert.h>
 
@@ -13,6 +14,27 @@ bool oid_eq(oid_t oid_a, oid_t oid_b)
 }
 
 /* Section `loc_t`. */
+
+char* loc_to_text_allocated(loc_t loc)
+{
+	switch (loc.type)
+	{
+		case LOC_NONE:
+			return format("nowhere");
+		break;
+		case LOC_TILE:
+			return format("tile (%d, %d)",
+				loc.tile_tc.x, loc.tile_tc.y);
+		break;
+		case LOC_INSIDE_OBJ:
+			return format("inside obj oid (%d, %d)",
+				loc.inside_obj_oid.index, loc.inside_obj_oid.generation);
+		break;
+		default:
+			assert(false); exit(EXIT_FAILURE);
+		break;
+	}
+}
 
 tc_t loc_tc(loc_t loc)
 {
@@ -95,6 +117,24 @@ void oid_da_remove(oid_da_t* da, oid_t oid)
 
 /* Section `obj_t`. */
 
+char const* obj_type_name(obj_type_t type)
+{
+	switch (type)
+	{
+		case OBJ_PLAYER:      return "player";
+		case OBJ_CRYSTAL:     return "crystal";
+		case OBJ_ROCK:        return "rock";
+		case OBJ_GRASS:       return "grass";
+		case OBJ_BUSH:        return "bush";
+		case OBJ_MOSS:        return "moss";
+		case OBJ_TREE:        return "tree";
+		case OBJ_SLIME:       return "slime";
+		case OBJ_CATERPILLAR: return "caterpillar";
+		case OBJ_WATER:       return "water";
+		default:              assert(false); exit(EXIT_FAILURE);
+	}
+}
+
 struct obj_entry_t
 {
 	bool used;
@@ -154,7 +194,7 @@ static void obj_unset_loc(oid_t oid)
 	}
 }
 
-oid_t obj_create(obj_type_t type, loc_t loc, int max_life)
+oid_t obj_create(obj_type_t type, loc_t loc, int max_life, material_id_t material_id)
 {
 	int index;
 	for (int i = 0; i < g_obj_da_len; i++)
@@ -177,7 +217,8 @@ oid_t obj_create(obj_type_t type, loc_t loc, int max_life)
 		.type = type,
 		.loc = (loc_t){.type = LOC_NONE},
 		.life = max_life,
-		.max_life = max_life};
+		.max_life = max_life,
+		.material_id = material_id};
 	entry->obj = obj;
 	entry->used = true;
 	entry->generation++;
@@ -216,12 +257,14 @@ void obj_destroy(oid_t oid)
 	obj_entry_t* entry = &g_obj_da[oid.index];
 	if (entry->used && entry->generation == oid.generation)
 	{
+		obj_t* obj = entry->obj;
+
 		/* If the object being destroyed contained subobjects,
 		 * then now the subobjects have to be located at the same
 		 * place as the container was. */
-		for (int i = 0; i < entry->obj->contained_da.len; i++)
+		for (int i = 0; i < obj->contained_da.len; i++)
 		{
-			obj_change_loc(entry->obj->contained_da.arr[i], entry->obj->loc);
+			obj_change_loc(obj->contained_da.arr[i], obj->loc);
 		}
 
 		obj_unset_loc(oid);
@@ -231,8 +274,8 @@ void obj_destroy(oid_t oid)
 	{
 		/* The object was already destroyed.
 		 * Should this be an error or something ? Or should destroying the same object
-		 * multiple times just be ignored ? Or log a warning somewhere ?
-		 * TODO: Do something maybe. */
+		 * multiple times just be ignored ? Or log a warning somewhere ? */
+		assert(false);
 	}
 }
 
@@ -405,6 +448,9 @@ rgb_t obj_foreground_color(oid_t oid)
 {
 	obj_t* obj = get_obj(oid);
 	assert(obj != NULL);
+	material_t* material = get_material(obj->material_id);
+	return material->color;
+	#if 0
 	switch (obj->type)
 	{
 		case OBJ_PLAYER:
@@ -441,6 +487,7 @@ rgb_t obj_foreground_color(oid_t oid)
 		default:
 			return g_color_white;
 	}
+	#endif
 }
 
 char const* obj_text_representation(oid_t oid)
