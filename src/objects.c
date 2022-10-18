@@ -52,6 +52,7 @@ tc_t loc_tc(loc_t loc)
 
 loc_t tc_to_loc(tc_t tc)
 {
+	assert(get_tile(tc) != NULL);
 	return (loc_t){.type = LOC_TILE, .tile_tc = tc};
 }
 
@@ -128,8 +129,10 @@ char const* obj_type_name(obj_type_t type)
 		case OBJ_BUSH:        return "bush";
 		case OBJ_MOSS:        return "moss";
 		case OBJ_TREE:        return "tree";
+		case OBJ_SEED:        return "seed";
 		case OBJ_SLIME:       return "slime";
 		case OBJ_CATERPILLAR: return "caterpillar";
+		case OBJ_EGG:         return "egg";
 		case OBJ_WATER:       return "water";
 		default:              assert(false); exit(EXIT_FAILURE);
 	}
@@ -218,7 +221,8 @@ oid_t obj_create(obj_type_t type, loc_t loc, int max_life, material_id_t materia
 		.loc = (loc_t){.type = LOC_NONE},
 		.life = max_life,
 		.max_life = max_life,
-		.material_id = material_id};
+		.material_id = material_id,
+		.age = 0};
 	entry->obj = obj;
 	entry->used = true;
 	entry->generation++;
@@ -264,6 +268,10 @@ void obj_destroy(oid_t oid)
 		 * place as the container was. */
 		for (int i = 0; i < obj->contained_da.len; i++)
 		{
+			if (oid_eq(obj->contained_da.arr[i], OID_NULL))
+			{
+				continue;
+			}
 			obj_change_loc(obj->contained_da.arr[i], obj->loc);
 		}
 
@@ -374,20 +382,7 @@ char const* obj_name(oid_t oid)
 {
 	obj_t* obj = get_obj(oid);
 	assert(obj != NULL);
-	switch (obj->type)
-	{
-		case OBJ_PLAYER:      return "player";
-		case OBJ_CRYSTAL:     return "crystal";
-		case OBJ_ROCK:        return "rock";
-		case OBJ_GRASS:       return "grass";
-		case OBJ_BUSH:        return "bush";
-		case OBJ_MOSS:        return "moss";
-		case OBJ_TREE:        return "tree";
-		case OBJ_SLIME:       return "slime";
-		case OBJ_CATERPILLAR: return "caterpillar";
-		case OBJ_WATER:       return "water";
-		default:              return "thing";
-	}
+	return obj_type_name(obj->type);
 }
 
 bool obj_is_blocking(oid_t oid)
@@ -402,6 +397,7 @@ bool obj_is_blocking(oid_t oid)
 		case OBJ_BUSH:
 		case OBJ_SLIME:
 		case OBJ_CATERPILLAR:
+		case OBJ_EGG:
 		case OBJ_PLAYER:
 			return true;
 		default:
@@ -418,6 +414,7 @@ bool obj_can_get_hit_for_now(oid_t oid)
 		case OBJ_BUSH:
 		case OBJ_SLIME:
 		case OBJ_CATERPILLAR:
+		case OBJ_EGG:
 		case OBJ_PLAYER:
 			return true;
 		default:
@@ -435,10 +432,12 @@ int obj_vision_blocking(oid_t oid)
 		case OBJ_BUSH:        return 4;
 		case OBJ_MOSS:        return 1;
 		case OBJ_TREE:        return 8;
+		case OBJ_SEED:        return 0;
 		case OBJ_ROCK:        return 100;
 		case OBJ_CRYSTAL:     return 4;
 		case OBJ_SLIME:       return 2;
 		case OBJ_CATERPILLAR: return 1;
+		case OBJ_EGG:         return 2;
 		case OBJ_WATER:       return 1;
 		default:              return 1;
 	}
@@ -500,9 +499,11 @@ char const* obj_text_representation(oid_t oid)
 		case OBJ_CRYSTAL:     return "A";
 		case OBJ_ROCK:        return "#";
 		case OBJ_TREE:        return "Y";
+		case OBJ_SEED:        return "  .  ";
 		case OBJ_BUSH:        return "n";
 		case OBJ_SLIME:       return "o";
 		case OBJ_CATERPILLAR: return "~";
+		case OBJ_EGG:         return " o ";
 		case OBJ_GRASS:       return " v ";
 		case OBJ_MOSS:        return " .. ";
 		case OBJ_WATER:       return "~";

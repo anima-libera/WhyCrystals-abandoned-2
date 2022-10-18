@@ -132,8 +132,10 @@ enum obj_type_t
 	OBJ_BUSH,
 	OBJ_MOSS,
 	OBJ_TREE,
+	OBJ_SEED,
 	OBJ_SLIME,
 	OBJ_CATERPILLAR,
+	OBJ_EGG,
 	OBJ_WATER,
 
 	OBJ_TYPE_NUMBER
@@ -153,6 +155,7 @@ struct obj_t
 	int life;
 	int max_life;
 	material_id_t material_id;
+	int age;
 
 	visual_effect_obj_da_t visual_effect_da;
 };

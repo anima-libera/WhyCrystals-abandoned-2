@@ -431,8 +431,10 @@ void draw_viewed_tiles(camera_t camera)
 			OBJ_BUSH,
 			OBJ_SLIME,
 			OBJ_CATERPILLAR,
+			OBJ_EGG,
 			OBJ_WATER,
 			OBJ_GRASS,
+			OBJ_SEED,
 			OBJ_MOSS};
 		_Static_assert(sizeof type_priority / sizeof type_priority[0] == OBJ_TYPE_NUMBER,
 			"Some object types have not been added to the drawing priority list.");
@@ -544,6 +546,7 @@ void perform_turn(void)
 	while (oid_iter(&oid))
 	{
 		obj_t* obj = get_obj(oid);
+		obj->age++;
 
 		if (obj->type == OBJ_CRYSTAL)
 		{
@@ -571,38 +574,109 @@ void perform_turn(void)
 		}
 		else if (obj->type == OBJ_SLIME)
 		{
-			if (obj->loc.type != LOC_TILE)
+			if (obj->age > 0 && obj->age % 50 == 0)
 			{
-				continue;
+				oid_t oid_egg = obj_create(OBJ_EGG, obj->loc, 1, rand_material(MATERIAL_HARD));
+				obj_create(OBJ_SLIME, inside_obj_loc(oid_egg), obj->max_life, obj->max_life);
 			}
-			if (rand() % 3 == 0)
+			else
 			{
-				obj_try_move(oid, rand_tm_one());
+				if (obj->loc.type == LOC_TILE && rand() % 3 == 0)
+				{
+					obj_try_move(oid, rand_tm_one());
+				}
+			}
+
+			if (obj->age > 100 && rand() % 5 == 0)
+			{
+				obj->life--;
+			}
+		}
+		else if (obj->type == OBJ_EGG)
+		{
+			if (obj->age >= 45 && rand() % 10 == 0)
+			{
+				obj_destroy(oid);
 			}
 		}
 		else if (obj->type == OBJ_CATERPILLAR)
 		{
-			if (obj->loc.type != LOC_TILE)
+			if (obj->age > 0 && obj->age % 50 == 0)
 			{
-				continue;
+				obj_create(OBJ_CATERPILLAR, obj->loc, obj->max_life, obj->material_id);
 			}
-			for (int i = 0; i < 4; i++)
+			else
 			{
-				tm_t tm = TM_ONE_ALL[i];
-				tc_t dst_tc = tc_add_tm(loc_tc(obj->loc), tm);
-				tile_t* dst_tile = get_tile(dst_tc);
-				if (dst_tile == NULL)
+				if (obj->loc.type == LOC_TILE)
 				{
-					continue;
-				}
-				if (oid_da_contains_type(&dst_tile->oid_da, OBJ_PLAYER))
-				{
-					obj_try_move(oid, tm);
-					goto caterpillar_done;
+					for (int i = 0; i < 4; i++)
+					{
+						tm_t tm = TM_ONE_ALL[i];
+						tc_t dst_tc = tc_add_tm(loc_tc(obj->loc), tm);
+						tile_t* dst_tile = get_tile(dst_tc);
+						if (dst_tile == NULL)
+						{
+							continue;
+						}
+						if (oid_da_contains_type(&dst_tile->oid_da, OBJ_PLAYER))
+						{
+							obj_try_move(oid, tm);
+							goto caterpillar_done_moving;
+						}
+					}
+					obj_try_move(oid, rand_tm_one());
+					caterpillar_done_moving:;
 				}
 			}
-			obj_try_move(oid, rand_tm_one());
-			caterpillar_done:;
+
+			if (obj->age > 100 && rand() % 5 == 0)
+			{
+				obj->life--;
+			}
+		}
+		else if (obj->type == OBJ_TREE)
+		{
+			if (obj->loc.type == LOC_TILE && obj->age >= 45 && rand() % 40 == 0)
+			{
+				tc_t seed_tc = tc_add_tm(loc_tc(obj->loc), rand_tm_one());
+				tile_t* seed_tile = get_tile(seed_tc);
+				if (seed_tile != NULL)
+				{
+					bool seed_tile_blocked =
+						oid_da_contains_obj_f(&get_tile(seed_tc)->oid_da, obj_is_blocking);
+					if (!seed_tile_blocked)
+					{
+						obj_create(OBJ_SEED, tc_to_loc(seed_tc),
+							1, rand_material(MATERIAL_VEGETAL));
+					}
+				}
+			}
+		}
+		else if (obj->type == OBJ_SEED)
+		{
+			if (obj->loc.type == LOC_TILE && obj->age >= 45 && rand() % 10 == 0)
+			{
+				bool tile_blocked =
+					oid_da_contains_obj_f(&get_tile(loc_tc(obj->loc))->oid_da, obj_is_blocking);
+				if (!tile_blocked)
+				{
+					obj_create(OBJ_TREE, obj->loc, 7, rand_material(MATERIAL_VEGETAL));
+					obj_destroy(oid);
+				}
+			}
+		}
+
+		/* The object might have been destroyed at this point. */
+		obj = get_obj(oid);
+		if (obj == NULL)
+		{
+			continue;
+		}
+
+		if (obj->life <= 0)
+		{
+			obj_destroy(oid);
+			continue;
 		}
 	}
 }
@@ -667,7 +741,7 @@ int main(void)
 
 	generate_map();
 
-	for (int i = 0; i < 1000; i++)
+	for (int i = 0; i < 200; i++)
 	{
 		perform_turn();
 	}
