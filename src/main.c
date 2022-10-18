@@ -918,6 +918,39 @@ int main(void)
 
 		draw_viewed_tiles(camera);
 
+		/* Display the objects that are on the tile of the player. */
+		{
+			obj_t* player_obj = get_obj(g_player_oid);
+			if (player_obj != NULL && player_obj->loc.type == LOC_TILE)
+			{
+				oid_da_t* tile_oid_da = &get_tile(loc_tc(player_obj->loc))->oid_da;
+				int y = g_window_h - 10 - 30;
+				for (int i = 0; i < tile_oid_da->len; i++)
+				{
+					oid_t oid = tile_oid_da->arr[i];
+					if (oid_eq(oid, OID_NULL))
+					{
+						continue;
+					}
+
+					draw_text_sc(obj_name(oid),
+						rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){g_window_w - 200, y});
+
+					SDL_Rect rect = {g_window_w - 200 - 10 - 25, y, 25, 25};
+
+					char const* text = obj_text_representation(oid);
+					int text_stretch = obj_text_representation_stretch(oid);
+					rgb_t text_color = obj_foreground_color(oid);
+
+					rect.y -= 5 + text_stretch;
+					rect.h += 10 + text_stretch + text_stretch / 3;
+					draw_text_rect(text, rgb_to_rgba(text_color, 255), FONT_RG, rect);
+				
+					y -= 30;
+				}
+			}
+		}
+
 		/* Display some information in a corner. */
 		{
 			int y = 10;
