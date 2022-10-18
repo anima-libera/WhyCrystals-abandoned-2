@@ -1,5 +1,6 @@
 
 #include "generators.h"
+#include <assert.h>
 
 /* Section `obj_gen_t`. */
 
@@ -20,12 +21,36 @@ obj_gen_t obj_gen_generate(void)
 		OBJ_SLIME, OBJ_CATERPILLAR};
 	obj_type_t obj_type = obj_types[rand() % (sizeof obj_types / sizeof obj_types[0])];
 
+	material_type_t material_type = MATERIAL_HARD;
+	switch (obj_type)
+	{
+		case OBJ_ROCK:
+			material_type = MATERIAL_HARD;
+		break;
+		case OBJ_TREE:
+		case OBJ_BUSH:
+		case OBJ_GRASS:
+		case OBJ_MOSS:
+			material_type = MATERIAL_VEGETAL;
+		break;
+		case OBJ_SLIME:
+		case OBJ_CATERPILLAR:
+			material_type = MATERIAL_TISSUE;
+		break;
+		case OBJ_WATER:
+			material_type = MATERIAL_LIQUID;
+		break;
+		default:
+			assert(false); exit(EXIT_FAILURE);
+		break;
+	}
+
+	material_id_t material_id = rand_material(material_type);
+	material_id_t rare_material_id = rand_material(material_type);
+	int rare_material_probability = rand() % (RARE_MATERIAL_PROBABILITY_MAX / 5);
+
 	int life_min = 1 + rand() % 5;
 	int life_max = life_min + rand() % 5;
-
-	material_id_t material_id = rand_material();
-	material_id_t rare_material_id = rand_material();
-	int rare_material_probability = rand() % (RARE_MATERIAL_PROBABILITY_MAX / 5);
 
 	return (obj_gen_t){
 		.obj_type = obj_type,

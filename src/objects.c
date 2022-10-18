@@ -449,7 +449,7 @@ rgb_t obj_foreground_color(oid_t oid)
 	obj_t* obj = get_obj(oid);
 	assert(obj != NULL);
 	material_t* material = get_material(obj->material_id);
-	return material->color;
+	return material->primary_color;
 	#if 0
 	switch (obj->type)
 	{
@@ -525,9 +525,10 @@ rgb_t obj_background_color(oid_t oid)
 {
 	obj_t* obj = get_obj(oid);
 	assert(obj != NULL);
+	material_t* material = get_material(obj->material_id);
 	switch (obj->type)
 	{
-		case OBJ_WATER: return g_color_blue;
+		case OBJ_WATER: return material->secondary_color;
 		default:        return g_color_bg;
 	}
 }

@@ -169,7 +169,7 @@ void generate_map_path(void)
 	tc_t crystal_tc = {
 		.x = g_mg_rect.x + g_mg_rect.w / 4 + rand() % (g_mg_rect.w / 9),
 		.y = g_mg_rect.y + g_mg_rect.h / 3 + rand() % (g_mg_rect.h / 3)};
-	obj_create(OBJ_CRYSTAL, tc_to_loc(crystal_tc), 100, rand_material());
+	obj_create(OBJ_CRYSTAL, tc_to_loc(crystal_tc), 100, rand_material(MATERIAL_HARD));
 
 	/* Generate the path. */
 	int path_try_count = 0;
@@ -326,7 +326,7 @@ void generate_map(void)
 
 		if (obj_moves_on_its_own(oid))
 		{
-			obj_create(OBJ_MOSS, tc_to_loc(tc), 1, rand_material());
+			obj_create(OBJ_MOSS, tc_to_loc(tc), 1, rand_material(MATERIAL_VEGETAL));
 		}
 
 		#if 0
@@ -538,6 +538,75 @@ void draw_viewed_tiles(camera_t camera)
 	}
 }
 
+void perform_turn(void)
+{
+	oid_t oid = OID_NULL;
+	while (oid_iter(&oid))
+	{
+		obj_t* obj = get_obj(oid);
+
+		if (obj->type == OBJ_CRYSTAL)
+		{
+			for (int i = 0; i < 4; i++)
+			{
+				tm_t tm = TM_ONE_ALL[i];
+				tc_t neighbor_tc = tc_add_tm(loc_tc(obj->loc), tm);
+				tile_t* neighbor_tile = get_tile(neighbor_tc);
+				if (neighbor_tile == NULL)
+				{
+					continue;
+				}
+				for (int i = 0; i < neighbor_tile->oid_da.len; i++)
+				{
+					obj_t* obj = get_obj(neighbor_tile->oid_da.arr[i]);
+					if (obj != NULL)
+					{
+						if (obj->life < obj->max_life)
+						{
+							obj->life++;
+						}
+					}
+				}
+			}
+		}
+		else if (obj->type == OBJ_SLIME)
+		{
+			if (obj->loc.type != LOC_TILE)
+			{
+				continue;
+			}
+			if (rand() % 3 == 0)
+			{
+				obj_try_move(oid, rand_tm_one());
+			}
+		}
+		else if (obj->type == OBJ_CATERPILLAR)
+		{
+			if (obj->loc.type != LOC_TILE)
+			{
+				continue;
+			}
+			for (int i = 0; i < 4; i++)
+			{
+				tm_t tm = TM_ONE_ALL[i];
+				tc_t dst_tc = tc_add_tm(loc_tc(obj->loc), tm);
+				tile_t* dst_tile = get_tile(dst_tc);
+				if (dst_tile == NULL)
+				{
+					continue;
+				}
+				if (oid_da_contains_type(&dst_tile->oid_da, OBJ_PLAYER))
+				{
+					obj_try_move(oid, tm);
+					goto caterpillar_done;
+				}
+			}
+			obj_try_move(oid, rand_tm_one());
+			caterpillar_done:;
+		}
+	}
+}
+
 int main(void)
 {
 	srand(time(NULL));
@@ -598,6 +667,11 @@ int main(void)
 
 	generate_map();
 
+	for (int i = 0; i < 1000; i++)
+	{
+		perform_turn();
+	}
+
 	{
 		/* Place the player on a tile that does not contains blocking objects. */
 		tc_t tc = {g_mg_rect.w / 2, g_mg_rect.h / 2};
@@ -611,7 +685,7 @@ int main(void)
 			tc = new_tc;
 		}
 		g_player_oid = obj_create(OBJ_PLAYER, tc_to_loc(tc),
-			10, rand_material());
+			10, rand_material(MATERIAL_TISSUE));
 	}
 
 	recompute_vision();
@@ -620,6 +694,13 @@ int main(void)
 	camera_set(&camera, loc_tc(get_obj(g_player_oid)->loc));
 
 	int obj_count = 0;
+	{
+		oid_t oid = OID_NULL;
+		while (oid_iter(&oid))
+		{
+			obj_count++;
+		}
+	}
 
 	int start_loop_time = SDL_GetTicks();
 	g_game_duration = 0;
@@ -690,7 +771,7 @@ int main(void)
 								if (player_obj != NULL)
 								{
 									obj_create(OBJ_MOSS, player_obj->loc,
-										1, rand_material());
+										1, rand_material(MATERIAL_VEGETAL));
 									must_perform_turn = true;
 									log_text("Created moss.");
 								}
@@ -725,72 +806,13 @@ int main(void)
 
 		if (must_perform_turn)
 		{
+			perform_turn();
+
 			obj_count = 0;
 			oid_t oid = OID_NULL;
 			while (oid_iter(&oid))
 			{
 				obj_count++;
-				obj_t* obj = get_obj(oid);
-
-				if (obj->type == OBJ_CRYSTAL)
-				{
-					for (int i = 0; i < 4; i++)
-					{
-						tm_t tm = TM_ONE_ALL[i];
-						tc_t neighbor_tc = tc_add_tm(loc_tc(obj->loc), tm);
-						tile_t* neighbor_tile = get_tile(neighbor_tc);
-						if (neighbor_tile == NULL)
-						{
-							continue;
-						}
-						for (int i = 0; i < neighbor_tile->oid_da.len; i++)
-						{
-							obj_t* obj = get_obj(neighbor_tile->oid_da.arr[i]);
-							if (obj != NULL)
-							{
-								if (obj->life < obj->max_life)
-								{
-									obj->life++;
-								}
-							}
-						}
-					}
-				}
-				else if (obj->type == OBJ_SLIME)
-				{
-					if (obj->loc.type != LOC_TILE)
-					{
-						continue;
-					}
-					if (rand() % 3 == 0)
-					{
-						obj_try_move(oid, rand_tm_one());
-					}
-				}
-				else if (obj->type == OBJ_CATERPILLAR)
-				{
-					if (obj->loc.type != LOC_TILE)
-					{
-						continue;
-					}
-					for (int i = 0; i < 4; i++)
-					{
-						tm_t tm = TM_ONE_ALL[i];
-						tc_t dst_tc = tc_add_tm(loc_tc(obj->loc), tm);
-						tile_t* dst_tile = get_tile(dst_tc);
-						if (dst_tile == NULL)
-						{
-							continue;
-						}
-						if (oid_da_contains_type(&dst_tile->oid_da, OBJ_PLAYER))
-						{
-							obj_try_move(oid, tm);
-							goto caterpillar_done;
-						}
-					}
-					obj_try_move(oid, rand_tm_one());
-					caterpillar_done:;
-				}
 			}
 
 			obj_t* player_obj = get_obj(g_player_oid);
