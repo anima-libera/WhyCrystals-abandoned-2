@@ -312,24 +312,6 @@ void generate_map_path(void)
 				}				
 			}
 		}
-		#if 0
-		/* Making sure that the path touches the right part of the map. */
-		bool path_touches_right_edge = false;
-		for (int y = 0; y < g_mg_rect.h; y++)
-		{
-			tc_t tc = {g_mg_rect.w-1, y};
-			tile_t* tile = get_tile(tc);
-			if (tile->is_path)
-			{
-				path_touches_right_edge = true;
-				break;
-			}
-		}
-		if (!path_touches_right_edge)
-		{
-			goto path_invalid;
-		}
-		#endif
 
 		/* The generated path was validated. */
 		break;
@@ -401,77 +383,6 @@ void generate_map(void)
 		{
 			obj_create(OBJ_MOSS, tc_to_loc(tc), 1, rand_material(MATERIAL_VEGETAL));
 		}
-
-		#if 0
-		if (rand() % 80 == 0)
-		{
-			obj_create(OBJ_WATER, tc_to_loc(tc),
-				1000, rand_material());
-		}
-		else if (rand() % 5 == 0)
-		{
-			obj_create(OBJ_ROCK, tc_to_loc(tc),
-				1000, rand_material());
-		}
-		else if (rand() % (neighbor_to_path ? 2 : 5) == 0)
-		{
-			obj_create(OBJ_TREE, tc_to_loc(tc),
-				100, rand_material());
-		}
-		else if (rand() % 3 != 0)
-		{
-			obj_create(OBJ_GRASS, tc_to_loc(tc),
-				4, rand_material());
-		}
-		else if (rand() % 3 != 0)
-		{
-			obj_create(OBJ_MOSS, tc_to_loc(tc),
-				2, rand_material());
-		}
-		else if (rand() % 3 != 0)
-		{
-			obj_create(OBJ_BUSH, tc_to_loc(tc),
-				8, rand_material());
-			obj_create(OBJ_MOSS, tc_to_loc(tc),
-				2, rand_material());
-		}
-
-		if (!oid_da_contains_type(&tile->oid_da, OBJ_ROCK) &&
-			!oid_da_contains_type(&tile->oid_da, OBJ_TREE) &&
-			!oid_da_contains_type(&tile->oid_da, OBJ_CRYSTAL))
-		{
-			if (rand() % 20 == 0)
-			{
-				oid_t slime_oid = obj_create(OBJ_SLIME, tc_to_loc(tc),
-					5, rand_material());
-				if (rand() % 2 == 0)
-				{
-					obj_create(OBJ_CATERPILLAR, inside_obj_loc(slime_oid),
-						1, rand_material());
-				}
-			}
-			else if (rand() % 50 == 0)
-			{
-				obj_create(OBJ_CATERPILLAR, tc_to_loc(tc),
-					6, rand_material());
-			}
-			else if (rand() % 800 == 0)
-			{
-				oid_t main_slime_oid = obj_create(OBJ_SLIME, tc_to_loc(tc),
-					20, rand_material());
-				for (int i = 0; i < 10; i++)
-				{
-					oid_t sub_slime_oid = obj_create(OBJ_SLIME, inside_obj_loc(main_slime_oid),
-						1, rand_material());
-					for (int j = 0; j < 4; j++)
-					{
-						obj_create(OBJ_SLIME, inside_obj_loc(sub_slime_oid),
-							1, rand_material());
-					}
-				}
-			}
-		}
-		#endif
 	}
 }
 
@@ -615,147 +526,13 @@ void draw_viewed_tiles(camera_t camera)
 
 void perform_turn(void)
 {
-	oid_t oid = OID_NULL;
-	while (oid_iter(&oid))
-	{
-		obj_t* obj = get_obj(oid);
-		obj->age++;
-
-		if (obj->type == OBJ_CRYSTAL)
-		{
-			for (int i = 0; i < 4; i++)
-			{
-				tm_t tm = TM_ONE_ALL[i];
-				tc_t neighbor_tc = tc_add_tm(loc_tc(obj->loc), tm);
-				tile_t* neighbor_tile = get_tile(neighbor_tc);
-				if (neighbor_tile == NULL)
-				{
-					continue;
-				}
-				for (int i = 0; i < neighbor_tile->oid_da.len; i++)
-				{
-					obj_t* obj = get_obj(neighbor_tile->oid_da.arr[i]);
-					if (obj != NULL)
-					{
-						if (obj->life < obj->max_life)
-						{
-							obj->life++;
-						}
-					}
-				}
-			}
-		}
-		else if (obj->type == OBJ_SLIME)
-		{
-			if (obj->age > 0 && obj->age % 50 == 0)
-			{
-				oid_t oid_egg = obj_create(OBJ_EGG, obj->loc, 1, rand_material(MATERIAL_HARD));
-				obj_create(OBJ_SLIME, inside_obj_loc(oid_egg), obj->max_life, obj->max_life);
-			}
-			else
-			{
-				if (obj->loc.type == LOC_TILE && rand() % 3 == 0)
-				{
-					obj_try_move(oid, rand_tm_one());
-				}
-			}
-
-			if (obj->age > 100 && rand() % 5 == 0)
-			{
-				obj->life--;
-			}
-		}
-		else if (obj->type == OBJ_EGG)
-		{
-			if (obj->age >= 45 && rand() % 10 == 0)
-			{
-				obj_destroy(oid);
-			}
-		}
-		else if (obj->type == OBJ_CATERPILLAR)
-		{
-			if (obj->age > 0 && obj->age % 50 == 0)
-			{
-				obj_create(OBJ_CATERPILLAR, obj->loc, obj->max_life, obj->material_id);
-			}
-			else
-			{
-				if (obj->loc.type == LOC_TILE)
-				{
-					for (int i = 0; i < 4; i++)
-					{
-						tm_t tm = TM_ONE_ALL[i];
-						tc_t dst_tc = tc_add_tm(loc_tc(obj->loc), tm);
-						tile_t* dst_tile = get_tile(dst_tc);
-						if (dst_tile == NULL)
-						{
-							continue;
-						}
-						if (oid_da_contains_type(&dst_tile->oid_da, OBJ_PLAYER))
-						{
-							obj_try_move(oid, tm);
-							goto caterpillar_done_moving;
-						}
-					}
-					obj_try_move(oid, rand_tm_one());
-					caterpillar_done_moving:;
-				}
-			}
-
-			if (obj->age > 100 && rand() % 5 == 0)
-			{
-				obj->life--;
-			}
-		}
-		else if (obj->type == OBJ_TREE)
-		{
-			if (obj->loc.type == LOC_TILE && obj->age >= 45 && rand() % 40 == 0)
-			{
-				tc_t seed_tc = tc_add_tm(loc_tc(obj->loc), rand_tm_one());
-				tile_t* seed_tile = get_tile(seed_tc);
-				if (seed_tile != NULL)
-				{
-					bool seed_tile_blocked =
-						oid_da_contains_obj_f(&get_tile(seed_tc)->oid_da, obj_is_blocking);
-					if (!seed_tile_blocked)
-					{
-						obj_create(OBJ_SEED, tc_to_loc(seed_tc),
-							1, rand_material(MATERIAL_VEGETAL));
-					}
-				}
-			}
-		}
-		else if (obj->type == OBJ_SEED)
-		{
-			if (obj->loc.type == LOC_TILE && obj->age >= 45 && rand() % 10 == 0)
-			{
-				bool tile_blocked =
-					oid_da_contains_obj_f(&get_tile(loc_tc(obj->loc))->oid_da, obj_is_blocking);
-				if (!tile_blocked)
-				{
-					obj_create(OBJ_TREE, obj->loc, 7, rand_material(MATERIAL_VEGETAL));
-					obj_destroy(oid);
-				}
-			}
-		}
-
-		/* The object might have been destroyed at this point. */
-		obj = get_obj(oid);
-		if (obj == NULL)
-		{
-			continue;
-		}
-
-		if (obj->life <= 0)
-		{
-			obj_destroy(oid);
-			continue;
-		}
-	}
+	apply_laws();
 }
 
 int main(void)
 {
+	printf("Initialize stuff\n");
+
 	srand(time(NULL));
 
 	if (SDL_Init(SDL_INIT_VIDEO) != 0)
@@ -810,15 +587,26 @@ int main(void)
 		*tile = (tile_t){0};
 	}
 
+	printf("Generate materials\n");
 	generate_some_materials();
-
+	printf("Generate map\n");
 	generate_map();
 
+	register_laws();
+
+	printf("Perform some turns\n");
 	for (int i = 0; i < 200; i++)
 	{
 		perform_turn();
-	}
 
+		if (i % 50 == 0 && i > 0)
+		{
+			printf("Performing turns %d%\n", (i * 100) / 200);
+		}
+	}
+	printf("Performing turns done\n");
+
+	printf("Spawn player\n");
 	{
 		/* Place the player on a tile that does not contains blocking objects. */
 		tc_t tc = {g_mg_rect.w / 2, g_mg_rect.h / 2};
@@ -834,7 +622,6 @@ int main(void)
 		g_player_oid = obj_create(OBJ_PLAYER, tc_to_loc(tc),
 			10, rand_material(MATERIAL_TISSUE));
 	}
-
 	recompute_vision();
 	
 	camera_t camera;
@@ -854,6 +641,8 @@ int main(void)
 	int iteration_duration = 0; /* In milliseconds. */
 	int iteration_number = 0;
 	int fps_in_some_recent_iteration = 0;
+
+	printf("Enter gameloop\n");
 
 	bool running = true;
 	while (running)
@@ -1055,16 +844,6 @@ int main(void)
 				free(text);
 				y += 30;
 			}
-
-			#if 0
-			{
-				char* text = format("Time: %.1f s", (float)g_game_duration / 1000.0f);
-				draw_text_sc(text,
-					rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
-				free(text);
-				y += 30;
-			}
-			#endif
 
 			{
 				char* text = format("Obj count: %d", obj_count);

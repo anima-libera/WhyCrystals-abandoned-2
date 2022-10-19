@@ -82,8 +82,6 @@ material_id_t generate_material(material_type_t type)
 		.type = type,
 		.primary_color = colors[0],
 		.secondary_color = colors[1]};
-
-	printf("Generated material %d: %s\n", id, name);
 	return id;
 }
 
@@ -104,6 +102,12 @@ void generate_some_materials(void)
 	for (int i = 0; i < 3; i++)
 	{
 		generate_material(MATERIAL_LIQUID);
+	}
+
+	printf("Generated %d materials: ", g_material_da_len);
+	for (int i = 0; i < g_material_da_len; i++)
+	{
+		printf("%s%s", g_material_da[i].name, i == g_material_da_len-1 ? "\n" : ", ");
 	}
 }
 
