@@ -133,7 +133,7 @@ char const* obj_type_name(obj_type_t type)
 		case OBJ_SLIME:       return "slime";
 		case OBJ_CATERPILLAR: return "caterpillar";
 		case OBJ_EGG:         return "egg";
-		case OBJ_WATER:       return "water";
+		case OBJ_LIQUID:      return "liquid";
 		default:              assert(false); exit(EXIT_FAILURE);
 	}
 }
@@ -438,7 +438,7 @@ int obj_vision_blocking(oid_t oid)
 		case OBJ_SLIME:       return 2;
 		case OBJ_CATERPILLAR: return 1;
 		case OBJ_EGG:         return 2;
-		case OBJ_WATER:       return 1;
+		case OBJ_LIQUID:      return 1;
 		default:              return 1;
 	}
 }
@@ -481,7 +481,7 @@ rgb_t obj_foreground_color(oid_t oid)
 			return g_color_dark_green;
 		case OBJ_MOSS:
 			return g_color_dark_green;
-		case OBJ_WATER:
+		case OBJ_LIQUID:
 			return g_color_cyan;
 		default:
 			return g_color_white;
@@ -506,7 +506,7 @@ char const* obj_text_representation(oid_t oid)
 		case OBJ_EGG:         return " o ";
 		case OBJ_GRASS:       return " v ";
 		case OBJ_MOSS:        return " .. ";
-		case OBJ_WATER:       return "~";
+		case OBJ_LIQUID:      return "~";
 		default:              return "X";
 	}
 }
@@ -529,8 +529,8 @@ rgb_t obj_background_color(oid_t oid)
 	material_t* material = get_material(obj->material_id);
 	switch (obj->type)
 	{
-		case OBJ_WATER: return material->secondary_color;
-		default:        return g_color_bg;
+		case OBJ_LIQUID: return material->secondary_color;
+		default:         return g_color_bg;
 	}
 }
 
@@ -540,7 +540,7 @@ bool obj_is_liquid(oid_t oid)
 	assert(obj != NULL);
 	switch (obj->type)
 	{
-		case OBJ_WATER:
+		case OBJ_LIQUID:
 			return true;
 		default:
 			return false;

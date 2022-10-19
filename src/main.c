@@ -8,6 +8,7 @@
 #include "game.h"
 #include "generators.h"
 #include "tc.h"
+#include "laws.h"
 #include <time.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -351,6 +352,7 @@ void generate_map(void)
 			continue;
 		}
 
+		#if 0
 		bool neighbor_to_path = false;
 		for (int i = 0; i < 4; i++)
 		{
@@ -361,6 +363,7 @@ void generate_map(void)
 				break;
 			}
 		}
+		#endif
 
 		biome_gen_t* biome_gen = &biome_gens[
 			((tc.y * 3) / g_mg_rect.h) * 3 + (tc.x * 3) / g_mg_rect.w];
@@ -416,7 +419,7 @@ void draw_viewed_tiles(camera_t camera)
 			OBJ_SLIME,
 			OBJ_CATERPILLAR,
 			OBJ_EGG,
-			OBJ_WATER,
+			OBJ_LIQUID,
 			OBJ_GRASS,
 			OBJ_SEED,
 			OBJ_MOSS};
@@ -601,7 +604,7 @@ int main(void)
 
 		if (i % 50 == 0 && i > 0)
 		{
-			printf("Performing turns %d%\n", (i * 100) / 200);
+			printf("Performing turns %d%%\n", (i * 100) / 200);
 		}
 	}
 	printf("Performing turns done\n");

@@ -17,7 +17,7 @@ obj_gen_t obj_gen_generate(void)
 {
 	obj_type_t obj_types[] = {
 		OBJ_TREE, OBJ_BUSH, OBJ_ROCK, OBJ_GRASS, OBJ_MOSS,
-		OBJ_WATER,
+		OBJ_LIQUID,
 		OBJ_SLIME, OBJ_CATERPILLAR};
 	obj_type_t obj_type = obj_types[rand() % (sizeof obj_types / sizeof obj_types[0])];
 
@@ -37,7 +37,7 @@ obj_gen_t obj_gen_generate(void)
 		case OBJ_CATERPILLAR:
 			material_type = MATERIAL_TISSUE;
 		break;
-		case OBJ_WATER:
+		case OBJ_LIQUID:
 			material_type = MATERIAL_LIQUID;
 		break;
 		default:
