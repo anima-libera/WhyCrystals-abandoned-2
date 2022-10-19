@@ -22,6 +22,14 @@ typedef struct tc_rect_t tc_rect_t;
 
 bool tc_in_rect(tc_t tc, tc_rect_t rect);
 
+/* Tile coords but with float.
+ * Should only be used for visual effects like particles and stuff. */
+struct tcf_t
+{
+	float x, y;
+};
+typedef struct tcf_t tcf_t;
+
 /* Tile move. Represents a move on the grid rather than a tile. */
 typedef tc_t tm_t;
 #define TM_UP    (tm_t){.x =  0, .y = -1}

@@ -54,6 +54,18 @@ void draw_text_sc(char const* text, rgba_t color, font_t font, sc_t sc)
 	SDL_DestroyTexture(texture);
 }
 
+void draw_text_sc_center(char const* text, rgba_t color, font_t font, sc_t sc)
+{
+	SDL_Texture* texture = text_to_texture(text, color, font);
+	SDL_Rect rect = {.x = sc.x, .y = sc.y};
+	SDL_QueryTexture(texture, NULL, NULL, &rect.w, &rect.h);
+	rect.x -= rect.w / 2;
+	rect.y -= rect.h / 2;
+	rect.x += 3; /* Correct some bias or something. */
+	SDL_RenderCopy(g_renderer, texture, NULL, &rect);
+	SDL_DestroyTexture(texture);
+}
+
 int g_tile_w = 30, g_tile_h = 30;
 
 void camera_set(camera_t* camera, tc_t target_tc)
@@ -78,4 +90,11 @@ SDL_Rect camera_tc_rect(camera_t camera, tc_t tc)
 		tc.x * g_tile_w + g_window_w / 2 - (int)camera.x,
 		tc.y * g_tile_h + g_window_h / 2 - (int)camera.y,
 		g_tile_w, g_tile_h};
+}
+
+sc_t camera_tcf(camera_t camera, tcf_t tcf)
+{
+	return (sc_t){
+		(tcf.x + 0.5f) * (float)g_tile_w + (float)g_window_w / 2.0f - camera.x,
+		(tcf.y + 0.5f) * (float)g_tile_h + (float)g_window_h / 2.0f - camera.y};
 }

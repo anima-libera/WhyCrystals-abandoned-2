@@ -56,6 +56,7 @@ typedef struct sc_t sc_t;
 SDL_Texture* text_to_texture(char const* text, rgba_t color, font_t font);
 void draw_text_rect(char const* text, rgba_t color, font_t font, SDL_Rect rect);
 void draw_text_sc(char const* text, rgba_t color, font_t font, sc_t sc);
+void draw_text_sc_center(char const* text, rgba_t color, font_t font, sc_t sc);
 
 /* Tile dimensions. */
 extern int g_tile_w, g_tile_h;
@@ -69,5 +70,6 @@ typedef struct camera_t camera_t;
 void camera_set(camera_t* camera, tc_t target_tc);
 void camera_move_smoothly(camera_t* camera, tc_t target_tc, float move_speed);
 SDL_Rect camera_tc_rect(camera_t camera, tc_t tc);
+sc_t camera_tcf(camera_t camera, tcf_t tcf);
 
 #endif /* WHYCRYSTALS_HEADER_RENDERING_ */

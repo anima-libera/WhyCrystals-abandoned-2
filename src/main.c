@@ -7,6 +7,7 @@
 #include "log.h"
 #include "game.h"
 #include "generators.h"
+#include "tc.h"
 #include <time.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -74,6 +75,70 @@ void recompute_vision(void)
 	}
 }
 
+struct text_particle_t
+{
+	int time_begin;
+	int time_end;
+	tcf_t tcf_begin;
+	tcf_t tcf_end;
+	char* text;
+	rgba_t color;
+};
+typedef struct text_particle_t text_particle_t;
+
+text_particle_t* text_particle_da;
+int text_particle_da_len, text_particle_da_cap;
+
+void create_text_particle(char* text, rgba_t color, tcf_t tcf, int duration)
+{
+	DA_LENGTHEN(text_particle_da_len += 1,
+		text_particle_da_cap, text_particle_da, text_particle_t);
+	text_particle_da[text_particle_da_len-1] = (text_particle_t){
+		.time_begin = g_game_duration,
+		.time_end = g_game_duration + duration,
+		.tcf_begin = tcf,
+		.tcf_end = {tcf.x, tcf.y - 1},
+		.text = text,
+		.color = color};
+}
+
+void draw_text_particles(camera_t camera)
+{
+	bool there_is_no_more_text_particles = true;
+	for (int i = 0; i < text_particle_da_len; i++)
+	{
+		text_particle_t* text_particle = &text_particle_da[i];
+		if (text_particle->time_end < g_game_duration)
+		{
+			if (text_particle_da[i].text != NULL)
+			{
+				free(text_particle_da[i].text);
+				text_particle_da[i] = (text_particle_t){0};
+			}
+			continue;
+		}
+		there_is_no_more_text_particles = false;
+
+		/* Actually draw it. */
+		int t = g_game_duration - text_particle->time_begin;
+		int t_max = text_particle->time_end - text_particle->time_begin;
+		sc_t sc_begin = camera_tcf(camera, text_particle->tcf_begin);
+		sc_t sc_end = camera_tcf(camera, text_particle->tcf_end);
+		sc_t sc = {
+			.x = interpolate(t, t_max, sc_begin.x, sc_end.x),
+			.y = interpolate(t, t_max, sc_begin.y, sc_end.y)};
+		draw_text_sc_center(text_particle->text, text_particle->color, FONT_TL, sc);
+	}
+
+	if (there_is_no_more_text_particles)
+	{
+		free(text_particle_da);
+		text_particle_da = NULL;
+		text_particle_da_len = 0;
+		text_particle_da_cap = 0;
+	}
+}
+
 bool g_game_over = false;
 char* g_game_over_cause = NULL;
 
@@ -90,7 +155,15 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 	tm_t dir = tc_diff_as_tm(tc_attacker, tc_target);
 	bool event_visible = get_tile(tc_attacker)->vision > 0 || get_tile(tc_target)->vision > 0;
 	
-	obj_target->life--;
+	int damages = 1;
+	if (event_visible)
+	{
+		create_text_particle(format("%d", damages),
+			(rgba_t){255, 0, 0, 255},
+			(tcf_t){(float)tc_target.x, (float)tc_target.y},
+			400);
+	}
+	obj_target->life -= damages;
 	if (obj_target->life <= 0)
 	{
 		if (event_visible)
@@ -917,6 +990,7 @@ int main(void)
 		}
 
 		draw_viewed_tiles(camera);
+		draw_text_particles(camera);
 
 		/* Display the objects that are on the tile of the player. */
 		{
@@ -933,15 +1007,15 @@ int main(void)
 						continue;
 					}
 
+					/* Draw a short text description of the object. */
 					draw_text_sc(obj_name(oid),
 						rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){g_window_w - 200, y});
 
+					/* Draw the object visual representation. */
 					SDL_Rect rect = {g_window_w - 200 - 10 - 25, y, 25, 25};
-
 					char const* text = obj_text_representation(oid);
 					int text_stretch = obj_text_representation_stretch(oid);
 					rgb_t text_color = obj_foreground_color(oid);
-
 					rect.y -= 5 + text_stretch;
 					rect.h += 10 + text_stretch + text_stretch / 3;
 					draw_text_rect(text, rgb_to_rgba(text_color, 255), FONT_RG, rect);
