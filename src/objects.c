@@ -15,6 +15,22 @@ bool oid_eq(oid_t oid_a, oid_t oid_b)
 
 /* Section `loc_t`. */
 
+char* attachment_to_text_allocated(attachment_t attachment)
+{
+	switch (attachment.type)
+	{
+		case ATTACHMENT_ON_SURFACE:
+			return format("on surface");
+		break;
+		case ATTACHMENT_INSIDE:
+			return format("inside");
+		break;
+		default:
+			assert(false); exit(EXIT_FAILURE);
+		break;
+	}
+}
+
 char* loc_to_text_allocated(loc_t loc)
 {
 	switch (loc.type)
@@ -24,11 +40,15 @@ char* loc_to_text_allocated(loc_t loc)
 		break;
 		case LOC_TILE:
 			return format("tile (%d, %d)",
-				loc.tile_tc.x, loc.tile_tc.y);
+				loc.tile.tc.x, loc.tile.tc.y);
 		break;
-		case LOC_INSIDE_OBJ:
-			return format("inside obj oid (%d, %d)",
-				loc.inside_obj_oid.index, loc.inside_obj_oid.generation);
+		case LOC_ATTACHED_TO_OBJ:
+			char* attachment_text = attachment_to_text_allocated(loc.attached_to_obj.attachment);
+			char* text = format("attached to obj oid (%d, %d) %s",
+				loc.attached_to_obj.oid.index, loc.attached_to_obj.oid.generation,
+				attachment_text);
+			free(attachment_text);
+			return text;
 		break;
 		default:
 			assert(false); exit(EXIT_FAILURE);
@@ -36,15 +56,15 @@ char* loc_to_text_allocated(loc_t loc)
 	}
 }
 
-tc_t loc_tc(loc_t loc)
+tc_t loc_to_tc(loc_t loc)
 {
 	switch (loc.type)
 	{
 		case LOC_TILE:
-			return loc.tile_tc;
-		case LOC_INSIDE_OBJ:
-			assert(get_obj(loc.inside_obj_oid) != NULL);
-			return loc_tc(get_obj(loc.inside_obj_oid)->loc);
+			return loc.tile.tc;
+		case LOC_ATTACHED_TO_OBJ:
+			assert(get_obj(loc.attached_to_obj.oid) != NULL);
+			return loc_to_tc(get_obj(loc.attached_to_obj.oid)->loc);
 		default:
 			assert(false); exit(EXIT_FAILURE);
 	}
@@ -53,13 +73,16 @@ tc_t loc_tc(loc_t loc)
 loc_t tc_to_loc(tc_t tc)
 {
 	assert(get_tile(tc) != NULL);
-	return (loc_t){.type = LOC_TILE, .tile_tc = tc};
+	return (loc_t){.type = LOC_TILE, .tile = {.tc = tc}};
 }
 
 loc_t inside_obj_loc(oid_t container_oid)
 {
 	assert(get_obj(container_oid) != NULL);
-	return (loc_t){.type = LOC_INSIDE_OBJ, .inside_obj_oid = container_oid};
+	return (loc_t){.type = LOC_ATTACHED_TO_OBJ,
+		.attached_to_obj = {
+			.oid = container_oid,
+			.attachment = {.type = ATTACHMENT_INSIDE}}};
 }
 
 /* Section `visual_effect_obj_type_t`. */
@@ -162,11 +185,11 @@ static void obj_set_loc(oid_t oid, loc_t loc)
 	switch (loc.type)
 	{
 		case LOC_TILE:
-			oid_da_add(&get_tile(loc_tc(loc))->oid_da, oid);
+			oid_da_add(&get_tile(loc_to_tc(loc))->oid_da, oid);
 			obj->loc = loc;
 		break;
-		case LOC_INSIDE_OBJ:
-			oid_da_add(&get_obj(loc.inside_obj_oid)->contained_da, oid);
+		case LOC_ATTACHED_TO_OBJ:
+			oid_da_add(&get_obj(loc.attached_to_obj.oid)->attached_da, oid);
 			obj->loc = loc;
 		break;
 		default:
@@ -185,11 +208,11 @@ static void obj_unset_loc(oid_t oid)
 	switch (obj->loc.type)
 	{
 		case LOC_TILE:
-			oid_da_remove(&get_tile(loc_tc(obj->loc))->oid_da, oid);
+			oid_da_remove(&get_tile(loc_to_tc(obj->loc))->oid_da, oid);
 			obj->loc = (loc_t){.type = LOC_NONE};
 		break;
-		case LOC_INSIDE_OBJ:
-			oid_da_remove(&get_obj(obj->loc.inside_obj_oid)->contained_da, oid);
+		case LOC_ATTACHED_TO_OBJ:
+			oid_da_remove(&get_obj(obj->loc.attached_to_obj.oid)->attached_da, oid);
 			obj->loc = (loc_t){.type = LOC_NONE};
 		break;
 		default:
@@ -266,13 +289,13 @@ void obj_destroy(oid_t oid)
 		/* If the object being destroyed contained subobjects,
 		 * then now the subobjects have to be located at the same
 		 * place as the container was. */
-		for (int i = 0; i < obj->contained_da.len; i++)
+		for (int i = 0; i < obj->attached_da.len; i++)
 		{
-			if (oid_eq(obj->contained_da.arr[i], OID_NULL))
+			if (oid_eq(obj->attached_da.arr[i], OID_NULL))
 			{
 				continue;
 			}
-			obj_change_loc(obj->contained_da.arr[i], obj->loc);
+			obj_change_loc(obj->attached_da.arr[i], obj->loc);
 		}
 
 		obj_unset_loc(oid);
@@ -463,11 +486,11 @@ rgb_t obj_foreground_color(oid_t oid)
 		case OBJ_BUSH:
 			return g_color_green;
 		case OBJ_SLIME:
-			if (obj->contained_da.len > 9)
+			if (obj->attached_da.len > 9)
 			{
 				return g_color_red;
 			}
-			else if (obj->contained_da.len > 0)
+			else if (obj->attached_da.len > 0)
 			{
 				return g_color_yellow;
 			}

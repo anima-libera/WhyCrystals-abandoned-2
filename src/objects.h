@@ -45,12 +45,32 @@ enum loc_type_t
 	 * Giving the none location to an object must be either temporary
 	 * or the object is to be destroyed. */
 	LOC_NONE,
+
 	/* The object is on a tile. */
 	LOC_TILE,
-	/* The object is inside of an other object. */
-	LOC_INSIDE_OBJ,
+	/* The object is attached to an other object (the nature of the attachment itself
+	 * is specified by `attachment_t`). */
+	LOC_ATTACHED_TO_OBJ,
 };
 typedef enum loc_type_t loc_type_t;
+
+enum attachment_type_t
+{
+	ATTACHMENT_ON_SURFACE,
+	ATTACHMENT_INSIDE,
+};
+typedef enum attachment_type_t attachment_type_t;
+
+/* Specifies in which way is an object attached to an other object. */
+struct attachment_t
+{
+	attachment_type_t type;
+
+	/* Note: Might hold more information than just the type one day. */
+};
+typedef struct attachment_t attachment_t;
+
+char* attachment_to_text_allocated(attachment_t attachment);
 
 /* A location that represents a place in the world. */
 struct loc_t
@@ -58,15 +78,24 @@ struct loc_t
 	loc_type_t type;
 	union
 	{
-		tc_t tile_tc;
-		oid_t inside_obj_oid;
+		struct
+		{
+			tc_t tc;
+		}
+		tile;
+		struct
+		{
+			oid_t oid;
+			attachment_t attachment;
+		}
+		attached_to_obj;
 	};
 };
 typedef struct loc_t loc_t;
 
 char* loc_to_text_allocated(loc_t loc);
 
-tc_t loc_tc(loc_t loc);
+tc_t loc_to_tc(loc_t loc);
 loc_t tc_to_loc(tc_t tc);
 loc_t inside_obj_loc(oid_t container_oid);
 
@@ -151,7 +180,7 @@ struct obj_t
 {
 	obj_type_t type;
 	loc_t loc;
-	oid_da_t contained_da;
+	oid_da_t attached_da;
 	int life;
 	int max_life;
 	material_id_t material_id;

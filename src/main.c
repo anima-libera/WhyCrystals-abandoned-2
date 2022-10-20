@@ -37,7 +37,7 @@ void recompute_vision(void)
 		tile->vision = 0;
 	}
 
-	tc_t src_tc = loc_tc(player_obj->loc);
+	tc_t src_tc = loc_to_tc(player_obj->loc);
 
 	for (int y = 0; y < g_mg_rect.h; y++)
 	for (int x = 0; x < g_mg_rect.w; x++)
@@ -151,8 +151,8 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 	{
 		return;
 	}
-	tc_t tc_attacker = loc_tc(obj_attacker->loc);
-	tc_t tc_target = loc_tc(obj_target->loc);
+	tc_t tc_attacker = loc_to_tc(obj_attacker->loc);
+	tc_t tc_target = loc_to_tc(obj_target->loc);
 	tm_t dir = tc_diff_as_tm(tc_attacker, tc_target);
 	bool event_visible = get_tile(tc_attacker)->vision > 0 || get_tile(tc_target)->vision > 0;
 	
@@ -203,7 +203,7 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 void obj_try_move(oid_t oid, tm_t move)
 {
 	assert(get_obj(oid) != NULL);
-	tc_t dst_tc = tc_add_tm(loc_tc(get_obj(oid)->loc), move);
+	tc_t dst_tc = tc_add_tm(loc_to_tc(get_obj(oid)->loc), move);
 	tile_t* dst_tile = get_tile(dst_tc);
 	if (dst_tile == NULL)
 	{
@@ -532,6 +532,43 @@ void perform_turn(void)
 	apply_laws();
 }
 
+void draw_obj_da(oid_da_t* oid_da)
+{
+	#warning TODO better GUI stuff
+
+	int y = g_window_h - 10 - 30;
+	for (int i = 0; i < oid_da->len; i++)
+	{
+		oid_t oid = oid_da->arr[i];
+		if (oid_eq(oid, OID_NULL))
+		{
+			continue;
+		}
+		/* Draw a short text description of the object. */
+		draw_text_sc(obj_name(oid),
+			rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){g_window_w - 200, y});
+		/* Draw the object visual representation. */
+		SDL_Rect rect = {g_window_w - 200 - 10 - 25, y, 25, 25};
+		char const* text = obj_text_representation(oid);
+		int text_stretch = obj_text_representation_stretch(oid);
+		rgb_t text_color = obj_foreground_color(oid);
+		rect.y -= 5 + text_stretch;
+		rect.h += 10 + text_stretch + text_stretch / 3;
+		draw_text_rect(text, rgb_to_rgba(text_color, 255), FONT_RG, rect);
+	
+		y -= 30;
+	}
+}
+
+void draw_objects_on_same_tile_list(oid_t oid)
+{
+	obj_t* obj = get_obj(oid);
+	assert(obj != NULL);
+	assert(obj->loc.type = LOC_TILE);
+	oid_da_t* tile_oid_da = &get_tile(loc_to_tc(obj->loc))->oid_da;
+	draw_obj_da(tile_oid_da);
+}
+
 int main(void)
 {
 	printf("Initialize stuff\n");
@@ -628,7 +665,7 @@ int main(void)
 	recompute_vision();
 	
 	camera_t camera;
-	camera_set(&camera, loc_tc(get_obj(g_player_oid)->loc));
+	camera_set(&camera, loc_to_tc(get_obj(g_player_oid)->loc));
 
 	int obj_count = 0;
 	{
@@ -777,44 +814,16 @@ int main(void)
 			obj_t* player_obj = get_obj(g_player_oid);
 			if (player_obj != NULL)
 			{
-				camera_move_smoothly(&camera, loc_tc(player_obj->loc), 0.035f);
+				camera_move_smoothly(&camera, loc_to_tc(player_obj->loc), 0.035f);
 			}
 		}
 
 		draw_viewed_tiles(camera);
 		draw_text_particles(camera);
 
-		/* Display the objects that are on the tile of the player. */
+		if (get_obj(g_player_oid) != NULL)
 		{
-			obj_t* player_obj = get_obj(g_player_oid);
-			if (player_obj != NULL && player_obj->loc.type == LOC_TILE)
-			{
-				oid_da_t* tile_oid_da = &get_tile(loc_tc(player_obj->loc))->oid_da;
-				int y = g_window_h - 10 - 30;
-				for (int i = 0; i < tile_oid_da->len; i++)
-				{
-					oid_t oid = tile_oid_da->arr[i];
-					if (oid_eq(oid, OID_NULL))
-					{
-						continue;
-					}
-
-					/* Draw a short text description of the object. */
-					draw_text_sc(obj_name(oid),
-						rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){g_window_w - 200, y});
-
-					/* Draw the object visual representation. */
-					SDL_Rect rect = {g_window_w - 200 - 10 - 25, y, 25, 25};
-					char const* text = obj_text_representation(oid);
-					int text_stretch = obj_text_representation_stretch(oid);
-					rgb_t text_color = obj_foreground_color(oid);
-					rect.y -= 5 + text_stretch;
-					rect.h += 10 + text_stretch + text_stretch / 3;
-					draw_text_rect(text, rgb_to_rgba(text_color, 255), FONT_RG, rect);
-				
-					y -= 30;
-				}
-			}
+			draw_objects_on_same_tile_list(g_player_oid);
 		}
 
 		/* Display some information in a corner. */

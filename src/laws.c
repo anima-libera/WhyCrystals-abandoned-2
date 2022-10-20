@@ -14,7 +14,7 @@ void law_crystal_healing_effect(oid_t oid)
 		for (int i = 0; i < 4; i++)
 		{
 			tm_t tm = TM_ONE_ALL[i];
-			tc_t neighbor_tc = tc_add_tm(loc_tc(obj->loc), tm);
+			tc_t neighbor_tc = tc_add_tm(loc_to_tc(obj->loc), tm);
 			tile_t* neighbor_tile = get_tile(neighbor_tc);
 			if (neighbor_tile == NULL)
 			{
@@ -99,7 +99,7 @@ void law_caterpillar_action(oid_t oid)
 				for (int i = 0; i < 4; i++)
 				{
 					tm_t tm = TM_ONE_ALL[i];
-					tc_t dst_tc = tc_add_tm(loc_tc(obj->loc), tm);
+					tc_t dst_tc = tc_add_tm(loc_to_tc(obj->loc), tm);
 					tile_t* dst_tile = get_tile(dst_tc);
 					if (dst_tile == NULL)
 					{
@@ -126,7 +126,7 @@ void law_tree_action(oid_t oid)
 	{
 		if (obj->loc.type == LOC_TILE && obj->age >= 45 && rand() % 40 == 0)
 		{
-			tc_t seed_tc = tc_add_tm(loc_tc(obj->loc), rand_tm_one());
+			tc_t seed_tc = tc_add_tm(loc_to_tc(obj->loc), rand_tm_one());
 			tile_t* seed_tile = get_tile(seed_tc);
 			if (seed_tile != NULL)
 			{
@@ -151,7 +151,7 @@ void law_seed_growing(oid_t oid)
 		if (obj->loc.type == LOC_TILE && obj->age >= 45 && rand() % 10 == 0)
 		{
 			bool tile_blocked =
-				oid_da_contains_obj_f(&get_tile(loc_tc(obj->loc))->oid_da, obj_is_blocking);
+				oid_da_contains_obj_f(&get_tile(loc_to_tc(obj->loc))->oid_da, obj_is_blocking);
 			if (!tile_blocked)
 			{
 				obj_create(OBJ_TREE, obj->loc, 7, rand_material(MATERIAL_VEGETAL));
