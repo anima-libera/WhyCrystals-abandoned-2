@@ -43,12 +43,15 @@ char* loc_to_text_allocated(loc_t loc)
 				loc.tile.tc.x, loc.tile.tc.y);
 		break;
 		case LOC_ATTACHED_TO_OBJ:
-			char* attachment_text = attachment_to_text_allocated(loc.attached_to_obj.attachment);
-			char* text = format("attached to obj oid (%d, %d) %s",
-				loc.attached_to_obj.oid.index, loc.attached_to_obj.oid.generation,
-				attachment_text);
-			free(attachment_text);
-			return text;
+			{
+				char* attachment_text =
+					attachment_to_text_allocated(loc.attached_to_obj.attachment);
+				char* text = format("attached to obj oid (%d, %d) %s",
+					loc.attached_to_obj.oid.index, loc.attached_to_obj.oid.generation,
+					attachment_text);
+				free(attachment_text);
+				return text;
+			}
 		break;
 		default:
 			assert(false); exit(EXIT_FAILURE);
@@ -174,6 +177,8 @@ typedef struct obj_entry_t obj_entry_t;
 static obj_entry_t* g_obj_da;
 static int g_obj_da_len, g_obj_da_cap;
 
+int g_obj_count = 0;
+
 static void obj_set_loc(oid_t oid, loc_t loc)
 {
 	obj_t* obj = get_obj(oid);
@@ -249,6 +254,7 @@ oid_t obj_create(obj_type_t type, loc_t loc, int max_life, material_id_t materia
 	entry->obj = obj;
 	entry->used = true;
 	entry->generation++;
+	g_obj_count++;
 	oid_t oid = {.index = index, .generation = entry->generation};
 
 	obj_set_loc(oid, loc);
@@ -300,6 +306,7 @@ void obj_destroy(oid_t oid)
 
 		obj_unset_loc(oid);
 		entry->used = false;
+		g_obj_count--;
 	}
 	else
 	{

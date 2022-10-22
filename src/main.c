@@ -9,6 +9,7 @@
 #include "generators.h"
 #include "tc.h"
 #include "laws.h"
+#include "gameloop.h"
 #include <time.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -17,9 +18,6 @@
 #include <stdarg.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
-
-/* Time since the beginning of the game loop, in milliseconds. */
-int g_game_duration = 0;
 
 void recompute_vision(void)
 {
@@ -95,8 +93,8 @@ void create_text_particle(char* text, rgba_t color, tcf_t tcf, int duration)
 	DA_LENGTHEN(text_particle_da_len += 1,
 		text_particle_da_cap, text_particle_da, text_particle_t);
 	text_particle_da[text_particle_da_len-1] = (text_particle_t){
-		.time_begin = g_game_duration,
-		.time_end = g_game_duration + duration,
+		.time_begin = g_game_time,
+		.time_end = g_game_time + duration,
 		.tcf_begin = tcf,
 		.tcf_end = {tcf.x, tcf.y - 1},
 		.text = text,
@@ -109,7 +107,7 @@ void draw_text_particles(camera_t camera)
 	for (int i = 0; i < text_particle_da_len; i++)
 	{
 		text_particle_t* text_particle = &text_particle_da[i];
-		if (text_particle->time_end < g_game_duration)
+		if (text_particle->time_end < g_game_time)
 		{
 			if (text_particle_da[i].text != NULL)
 			{
@@ -121,7 +119,7 @@ void draw_text_particles(camera_t camera)
 		there_is_no_more_text_particles = false;
 
 		/* Actually draw it. */
-		int t = g_game_duration - text_particle->time_begin;
+		int t = g_game_time - text_particle->time_begin;
 		int t_max = text_particle->time_end - text_particle->time_begin;
 		sc_t sc_begin = camera_tcf(camera, text_particle->tcf_begin);
 		sc_t sc_end = camera_tcf(camera, text_particle->tcf_end);
@@ -184,8 +182,8 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 	{
 		visual_effect_obj_da_add(&obj_target->visual_effect_da, (visual_effect_obj_t){
 			.type = VISUAL_EFFECT_OBJ_DAMAGED,
-			.time_begin = g_game_duration,
-			.time_end = g_game_duration + 100,
+			.time_begin = g_game_time,
+			.time_end = g_game_time + 100,
 			.dir = dir});
 		if (event_visible)
 		{
@@ -195,8 +193,8 @@ void obj_hits_obj(oid_t oid_attacker, oid_t oid_target)
 	}
 	visual_effect_obj_da_add(&obj_attacker->visual_effect_da, (visual_effect_obj_t){
 		.type = VISUAL_EFFECT_OBJ_ATTACK,
-		.time_begin = g_game_duration,
-		.time_end = g_game_duration + 80,
+		.time_begin = g_game_time,
+		.time_end = g_game_time + 80,
 		.dir = dir});
 }
 
@@ -233,8 +231,8 @@ void obj_try_move(oid_t oid, tm_t move)
 
 	visual_effect_obj_da_add(&get_obj(oid)->visual_effect_da, (visual_effect_obj_t){
 		.type = VISUAL_EFFECT_OBJ_MOVE,
-		.time_begin = g_game_duration,
-		.time_end = g_game_duration + 60,
+		.time_begin = g_game_time,
+		.time_end = g_game_time + 60,
 		.dir = tm_reverse(move)});
 }
 
@@ -478,7 +476,7 @@ void draw_viewed_tiles(camera_t camera)
 			for (int i = 0; i < obj->visual_effect_da.len; i++)
 			{
 				visual_effect_obj_t* ve = &obj->visual_effect_da.arr[i];
-				if (g_game_duration > ve->time_end)
+				if (g_game_time > ve->time_end)
 				{
 					visual_effect_obj_da_remove(&obj->visual_effect_da, i);
 					continue;
@@ -489,7 +487,7 @@ void draw_viewed_tiles(camera_t camera)
 				}
 				if (ve->type != VISUAL_EFFECT_OBJ_NONE)
 				{
-					int t = g_game_duration - ve->time_begin;
+					int t = g_game_time - ve->time_begin;
 					int t_max = ve->time_end - ve->time_begin;
 
 					if (ve->type == VISUAL_EFFECT_OBJ_DAMAGED)
@@ -530,6 +528,23 @@ void draw_viewed_tiles(camera_t camera)
 void perform_turn(void)
 {
 	apply_laws();
+
+	if (g_game_has_started)
+	{
+		obj_t* player_obj = get_obj(g_player_oid);
+		if (!g_game_over && (player_obj == NULL || player_obj->life <= 0))
+		{
+			log_text("Game over.");
+			g_game_over = true;
+			g_game_over_cause = format("Killed by.. something?");
+		}
+		else
+		{
+			recompute_vision();
+			g_turn_number++;
+		}
+		log_turn_seperator();
+	}
 }
 
 void draw_obj_da(oid_da_t* oid_da)
@@ -569,7 +584,7 @@ void draw_objects_on_same_tile_list(oid_t oid)
 	draw_obj_da(tile_oid_da);
 }
 
-int main(void)
+void init_all(void)
 {
 	printf("Initialize stuff\n");
 
@@ -664,227 +679,166 @@ int main(void)
 	}
 	recompute_vision();
 	
-	camera_t camera;
-	camera_set(&camera, loc_to_tc(get_obj(g_player_oid)->loc));
+	camera_set(&g_camera, loc_to_tc(get_obj(g_player_oid)->loc));
 
-	int obj_count = 0;
+	printf("Object count at the end of initialization: %d\n", g_obj_count);
+}
+
+void cleanup_all(void)
+{
+	printf("Cleanup stuff\n");
+	TTF_Quit();
+	SDL_DestroyRenderer(g_renderer);
+	SDL_DestroyWindow(g_window);
+	SDL_Quit();
+}
+
+void base_game_state_draw_layer(void)
+{
 	{
-		oid_t oid = OID_NULL;
-		while (oid_iter(&oid))
+		obj_t* player_obj = get_obj(g_player_oid);
+		if (player_obj != NULL)
 		{
-			obj_count++;
+			camera_move_smoothly(&g_camera, loc_to_tc(player_obj->loc), 0.035f);
 		}
 	}
 
-	int start_loop_time = SDL_GetTicks();
-	g_game_duration = 0;
-	int iteration_duration = 0; /* In milliseconds. */
-	int iteration_number = 0;
-	int fps_in_some_recent_iteration = 0;
+	draw_viewed_tiles(g_camera);
+	draw_text_particles(g_camera);
 
-	printf("Enter gameloop\n");
-
-	bool running = true;
-	while (running)
+	if (get_obj(g_player_oid) != NULL)
 	{
-		int start_iteration_time = SDL_GetTicks();
-		g_game_duration = start_iteration_time - start_loop_time;
+		draw_objects_on_same_tile_list(g_player_oid);
+	}
 
-		bool must_perform_turn = false;
-
-		SDL_Event event;
-		while (SDL_PollEvent(&event))
-		{
-			switch (event.type)
-			{
-				case SDL_QUIT:
-					running = false;
-				break;
-				case SDL_WINDOWEVENT:
-					switch (event.window.event)
-					{
-						case SDL_WINDOWEVENT_RESIZED:
-							SDL_GetRendererOutputSize(g_renderer, &g_window_w, &g_window_h);
-						break;
-					}
-				break;
-				case SDL_KEYDOWN:
-					switch (event.key.keysym.sym)
-					{
-						case SDLK_ESCAPE:
-							running = false;
-						break;
-						case SDLK_s:
-							/* Sucide key (for debugging purposes). */
-							obj_destroy(g_player_oid);
-							log_text("Game over.");
-							g_game_over = true;
-							g_game_over_cause = format("Killed by suicide xd.");
-						break;
-						case SDLK_p:
-							/* Possess key (for debugging purposes). */
-							while (true)
-							{
-								oid_t oid = rand_oid();
-								obj_t* obj = get_obj(oid);
-								if (obj->loc.type == LOC_TILE)
-								{
-									if (rand() % 30 != 0)
-									{
-										continue;
-									}
-									g_player_oid = oid;
-									must_perform_turn = true;
-									log_text("Possessing somthing somewhere.");
-									break;
-								}
-							}
-						break;
-						case SDLK_o:
-							/* Object key (for debugging purposes). */
-							{
-								obj_t* player_obj = get_obj(g_player_oid);
-								if (player_obj != NULL)
-								{
-									obj_create(OBJ_MOSS, player_obj->loc,
-										1, rand_material(MATERIAL_VEGETAL));
-									must_perform_turn = true;
-									log_text("Created moss.");
-								}
-							}
-						break;
-						case SDLK_KP_PLUS:
-						case SDLK_KP_MINUS:
-							g_tile_w += 5 * (event.key.keysym.sym == SDLK_KP_PLUS ? 1 : -1);
-							g_tile_h += 5 * (event.key.keysym.sym == SDLK_KP_PLUS ? 1 : -1);
-						break;
-						case SDLK_UP:
-						case SDLK_RIGHT:
-						case SDLK_DOWN:
-						case SDLK_LEFT:
-							if (!g_game_over)
-							{
-								tm_t dir = tm_from_arrow_key(event.key.keysym.sym);
-								obj_try_move(g_player_oid, dir);
-								must_perform_turn = true;
-							}
-						break;
-						case SDLK_KP_0:
-							if (!g_game_over)
-							{
-								must_perform_turn = true;
-							}
-						break;
-					}
-				break;
-			}
-		}
-
-		if (must_perform_turn)
-		{
-			perform_turn();
-
-			obj_count = 0;
-			oid_t oid = OID_NULL;
-			while (oid_iter(&oid))
-			{
-				obj_count++;
-			}
-
-			obj_t* player_obj = get_obj(g_player_oid);
-			if (!g_game_over && (player_obj == NULL || player_obj->life <= 0))
-			{
-				log_text("Game over.");
-				g_game_over = true;
-				g_game_over_cause = format("Killed by.. something?");
-			}
-			else
-			{
-				recompute_vision();
-				g_turn_number++;
-			}
-			log_turn_seperator();
-		}
-
-		SDL_SetRenderDrawColor(g_renderer,
-			g_color_bg_shadow.r, g_color_bg_shadow.g, g_color_bg_shadow.b, 255);
-		SDL_RenderClear(g_renderer);
+	/* Display some information in a corner. */
+	{
+		int y = 10;
 
 		{
 			obj_t* player_obj = get_obj(g_player_oid);
 			if (player_obj != NULL)
 			{
-				camera_move_smoothly(&camera, loc_to_tc(player_obj->loc), 0.035f);
+				char* text = format("HP: %d", get_obj(g_player_oid)->life);
+				draw_text_sc(text,
+					rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
+				free(text);
+				y += 30;
 			}
 		}
 
-		draw_viewed_tiles(camera);
-		draw_text_particles(camera);
-
-		if (get_obj(g_player_oid) != NULL)
+		if (g_game_over)
 		{
-			draw_objects_on_same_tile_list(g_player_oid);
+			draw_text_sc(g_game_over_cause,
+				rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
+			y += 30;
+		}
+		
+		{
+			char* text = format("FPS: %d", g_fps_in_some_recent_iteration);
+			draw_text_sc(text,
+				rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
+			free(text);
+			y += 30;
 		}
 
-		/* Display some information in a corner. */
 		{
-			int y = 10;
+			char* text = format("Obj count: %d", g_obj_count);
+			draw_text_sc(text,
+				rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
+			free(text);
+			y += 30;
+		}
+	}
 
+	draw_log();
+}
+
+void base_game_handle_input_event_direction(input_event_direction_t input_event_direction)
+{
+	if (!g_game_over)
+	{
+		tm_t dir = tm_from_input_event_direction(input_event_direction);
+		obj_try_move(g_player_oid, dir);
+		perform_turn();
+	}
+}
+
+void base_game_handle_input_event_debugging_letter_key(char letter)
+{
+	switch (letter)
+	{
+		case 'a':
+		case 'q':
+			/* Zoom in or out. */
+			g_tile_w += 5 * (letter == 'a' ? 1 : -1);
+			g_tile_h += 5 * (letter == 'a' ? 1 : -1);
+		break;
+		case 's':
+			/* Commit sucide. */
+			obj_destroy(g_player_oid);
+			log_text("Game over.");
+			g_game_over = true;
+			g_game_over_cause = format("Killed by suicide xd.");
+		break;
+		case 'p':
+			/* Possess a random object, abandonning the current body. */
+			while (true)
+			{
+				oid_t oid = rand_oid();
+				obj_t* obj = get_obj(oid);
+				if (obj->loc.type == LOC_TILE)
+				{
+					if (rand() % 30 != 0)
+					{
+						continue;
+					}
+					g_player_oid = oid;
+					log_text("Possessing something somewhere.");
+					perform_turn();
+					break;
+				}
+			}
+		break;
+		case 'o':
+			/* Produce some moss. */
 			{
 				obj_t* player_obj = get_obj(g_player_oid);
 				if (player_obj != NULL)
 				{
-					char* text = format("HP: %d", get_obj(g_player_oid)->life);
-					draw_text_sc(text,
-						rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
-					free(text);
-					y += 30;
+					obj_create(OBJ_MOSS, player_obj->loc,
+						1, rand_material(MATERIAL_VEGETAL));
+					log_text("Created moss.");
+					perform_turn();
 				}
 			}
+		break;
+	}
+}
 
-			if (g_game_over)
-			{
-				draw_text_sc(g_game_over_cause,
-					rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
-				y += 30;
-			}
-			
-			{
-				char* text = format("FPS: %d", fps_in_some_recent_iteration);
-				draw_text_sc(text,
-					rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
-				free(text);
-				y += 30;
-			}
+game_state_t base_game_state = {
+	.draw_layer =
+		base_game_state_draw_layer,
+	.handle_input_event_direction =
+		base_game_handle_input_event_direction,
+	.handle_input_event_debugging_letter_key =
+		base_game_handle_input_event_debugging_letter_key};
 
-			{
-				char* text = format("Obj count: %d", obj_count);
-				draw_text_sc(text,
-					rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){10, y});
-				free(text);
-				y += 30;
-			}
-		}
+int main(void)
+{
+	main_start:
 
-		draw_log();
-
-		SDL_RenderPresent(g_renderer);
-
-		iteration_number++;
-
-		int end_iteration_time = SDL_GetTicks();
-		iteration_duration = end_iteration_time - start_iteration_time;
-
-		if (iteration_number % 20 == 0)
-		{
-			fps_in_some_recent_iteration =
-				iteration_duration == 0 ? 0.0f : 1000 / iteration_duration;
-		}
+	init_all();
+	push_game_state(base_game_state);
+	enter_gameloop();
+	cleanup_all();
+	
+	if (g_should_restart)
+	{
+		g_should_restart = false;
+		goto main_start;
 	}
 
-	TTF_Quit();
-	SDL_DestroyRenderer(g_renderer);
-	SDL_DestroyWindow(g_window);
-	SDL_Quit();
+	printf("Terminate execution normally\n");
 	return 0;
 }

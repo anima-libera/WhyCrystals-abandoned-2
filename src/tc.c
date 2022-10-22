@@ -40,15 +40,15 @@ tm_t tc_diff_as_tm(tc_t src, tc_t dst)
     return (tm_t){.x = dst.x - src.x, .y = dst.y - src.y};
 }
 
-tm_t tm_from_arrow_key(SDL_KeyCode keycode)
+tm_t tm_from_input_event_direction(input_event_direction_t input_event_direction)
 {
-	switch (keycode)
+	switch (input_event_direction)
 	{
-		case SDLK_UP:    return TM_UP;
-		case SDLK_RIGHT: return TM_RIGHT;
-		case SDLK_DOWN:  return TM_DOWN;
-		case SDLK_LEFT:  return TM_LEFT;
-		default:         assert(false); exit(EXIT_FAILURE);
+		case INPUT_EVENT_DIRECTION_UP:    return TM_UP;
+		case INPUT_EVENT_DIRECTION_RIGHT: return TM_RIGHT;
+		case INPUT_EVENT_DIRECTION_DOWN:  return TM_DOWN;
+		case INPUT_EVENT_DIRECTION_LEFT:  return TM_LEFT;
+		default:                          assert(false); exit(EXIT_FAILURE);
 	}
 }
 

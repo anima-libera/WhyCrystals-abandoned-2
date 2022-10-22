@@ -66,6 +66,10 @@ void draw_text_sc_center(char const* text, rgba_t color, font_t font, sc_t sc)
 	SDL_DestroyTexture(texture);
 }
 
+/* Section `camera_t`. */
+
+camera_t g_camera = {0};
+
 int g_tile_w = 30, g_tile_h = 30;
 
 void camera_set(camera_t* camera, tc_t target_tc)

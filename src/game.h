@@ -4,6 +4,9 @@
 
 #include "rendering.h"
 
+/* Has the player spawned and stuff be displayed to the user ? */
+extern bool g_game_has_started;
+
 extern int g_turn_number;
 
 /* Section `material_t`. */

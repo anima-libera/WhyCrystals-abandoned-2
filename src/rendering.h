@@ -58,14 +58,18 @@ void draw_text_rect(char const* text, rgba_t color, font_t font, SDL_Rect rect);
 void draw_text_sc(char const* text, rgba_t color, font_t font, sc_t sc);
 void draw_text_sc_center(char const* text, rgba_t color, font_t font, sc_t sc);
 
-/* Tile dimensions. */
-extern int g_tile_w, g_tile_h;
+/* Section `camera_t`. */
 
 struct camera_t
 {
 	float x, y;
 };
 typedef struct camera_t camera_t;
+
+extern camera_t g_camera;
+
+/* Tile dimensions. */
+extern int g_tile_w, g_tile_h;
 
 void camera_set(camera_t* camera, tc_t target_tc);
 void camera_move_smoothly(camera_t* camera, tc_t target_tc, float move_speed);

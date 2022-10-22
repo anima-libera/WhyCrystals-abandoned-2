@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <assert.h>
 
+bool g_game_has_started = false;
+
 int g_turn_number = 0;
 
 /* Section `material_t`. */

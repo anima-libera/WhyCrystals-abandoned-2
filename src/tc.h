@@ -2,7 +2,7 @@
 #ifndef WHYCRYSTALS_HEADER_TC_
 #define WHYCRYSTALS_HEADER_TC_
 
-#include <SDL2/SDL.h>
+#include "gameloop.h"
 #include <stdbool.h>
 
 /* Tile coords. */
@@ -43,7 +43,7 @@ bool tm_one_orthogonal(tm_t a, tm_t b);
 tc_t tc_add_tm(tc_t tc, tm_t move);
 tm_t tm_reverse(tm_t move);
 tm_t tc_diff_as_tm(tc_t src, tc_t dst);
-tm_t tm_from_arrow_key(SDL_KeyCode keycode);
+tm_t tm_from_input_event_direction(input_event_direction_t input_event_direction);
 
 /* Section Bresenham. */
 

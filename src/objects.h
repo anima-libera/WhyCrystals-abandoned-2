@@ -190,6 +190,8 @@ struct obj_t
 };
 typedef struct obj_t obj_t;
 
+extern int g_obj_count;
+
 oid_t obj_create(obj_type_t type, loc_t loc, int max_life, material_id_t material_id);
 void obj_destroy(oid_t oid);
 obj_t* get_obj(oid_t oid);
