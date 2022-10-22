@@ -118,13 +118,20 @@ void enter_gameloop(void)
 							}
 						break;
 						default:
-							if (SDLK_a <= event.key.keysym.sym && event.key.keysym.sym <= SDLK_z &&
-								SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LSHIFT] &&
-								SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LCTRL] &&
-								game_state->handle_input_event_debugging_letter_key != NULL)
+							if (SDLK_a <= event.key.keysym.sym && event.key.keysym.sym <= SDLK_z)
 							{
-								game_state->handle_input_event_debugging_letter_key(
-									event.key.keysym.sym);
+								if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LSHIFT] &&
+									SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LCTRL] &&
+									game_state->handle_input_event_debugging_letter_key != NULL)
+								{
+									game_state->handle_input_event_debugging_letter_key(
+										event.key.keysym.sym);
+								}
+								else if (game_state->handle_input_event_letter_key != NULL)
+								{
+									game_state->handle_input_event_letter_key(
+										event.key.keysym.sym);
+								}
 							}
 						break;
 					}

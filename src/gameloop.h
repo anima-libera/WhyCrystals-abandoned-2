@@ -18,6 +18,7 @@ struct game_state_t
 	void (*draw_layer)(void);
 	void (*handle_input_event_escape)(void);
 	void (*handle_input_event_direction)(input_event_direction_t input_event_direction);
+	void (*handle_input_event_letter_key)(char letter);
 	void (*handle_input_event_debugging_letter_key)(char letter);
 };
 typedef struct game_state_t game_state_t;

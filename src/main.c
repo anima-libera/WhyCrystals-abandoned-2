@@ -676,6 +676,14 @@ void init_all(void)
 		}
 		g_player_oid = obj_create(OBJ_PLAYER, tc_to_loc(tc),
 			10, rand_material(MATERIAL_TISSUE));
+
+		#warning TEST
+		obj_create(OBJ_MOSS, inside_obj_loc(g_player_oid),
+			10, rand_material(MATERIAL_VEGETAL));
+		oid_t moss_oid = obj_create(OBJ_MOSS, inside_obj_loc(g_player_oid),
+			10, rand_material(MATERIAL_VEGETAL));
+		obj_create(OBJ_GRASS, inside_obj_loc(moss_oid),
+			10, rand_material(MATERIAL_VEGETAL));
 	}
 	recompute_vision();
 	
@@ -692,6 +700,86 @@ void cleanup_all(void)
 	SDL_DestroyWindow(g_window);
 	SDL_Quit();
 }
+
+void draw_object_list_entry(oid_t oid, int y, int indent_level)
+{
+	/* Draw indentations. */
+	SDL_SetRenderDrawColor(g_renderer, g_color_white.r, g_color_white.g, g_color_white.b, 255);
+	for (int i = 0; i < indent_level; i++)
+	{
+		SDL_RenderDrawLine(g_renderer, 300 + i * 10, y, 300 + i * 10, y + 30);
+	}
+	
+	/* Draw the object visual representation. */
+	SDL_Rect rect = {300 + indent_level * 10, y, 25, 25};
+	char const* text = obj_text_representation(oid);
+	int text_stretch = obj_text_representation_stretch(oid);
+	rgb_t text_color = obj_foreground_color(oid);
+	rgb_t bg_color = obj_background_color(oid);
+	SDL_SetRenderDrawColor(g_renderer, bg_color.r, bg_color.g, bg_color.b, 255);
+	SDL_RenderFillRect(g_renderer, &rect);
+	rect.y -= 5 + text_stretch;
+	rect.h += 10 + text_stretch + text_stretch / 3;
+	draw_text_rect(text, rgb_to_rgba(text_color, 255), FONT_RG, rect);
+
+	/* Draw a short text description of the object. */
+	draw_text_sc(obj_name(oid),
+		rgb_to_rgba(g_color_white, 255), FONT_RG, (sc_t){300 + indent_level * 10 + 30, y});
+}
+
+int draw_object_list_recursively(oid_t oid, int y, int indent_level)
+{
+	obj_t* obj = get_obj(oid);
+	if (obj == NULL)
+	{
+		return y;
+	}
+
+	draw_object_list_entry(oid, y, indent_level);
+	y += 30;
+
+	for (int i = 0; i < obj->attached_da.len; i++)
+	{
+		oid_t sub_oid = obj->attached_da.arr[i];
+		if (oid_eq(sub_oid, OID_NULL))
+		{
+			continue;
+		}
+		y = draw_object_list_recursively(sub_oid, y, indent_level + 1);
+	}
+
+	return y;
+}
+
+void internals_menu_game_state_draw_layer(void)
+{
+	draw_object_list_recursively(g_player_oid, 20, 0);
+}
+
+void internals_menu_game_handle_input_event_direction(input_event_direction_t input_event_direction)
+{
+	;
+}
+
+void internals_menu_game_handle_input_event_letter_key(char letter)
+{
+	;
+}
+
+void internals_menu_game_handle_input_event_debugging_letter_key(char letter)
+{
+	;
+}
+
+game_state_t internals_menu_game_state = {
+	.draw_layer =
+		internals_menu_game_state_draw_layer,
+	.handle_input_event_direction =
+		internals_menu_game_handle_input_event_direction,
+	.handle_input_event_letter_key =
+		internals_menu_game_handle_input_event_letter_key,
+	.handle_input_event_debugging_letter_key =
+		internals_menu_game_handle_input_event_debugging_letter_key};
 
 void base_game_state_draw_layer(void)
 {
@@ -764,6 +852,16 @@ void base_game_handle_input_event_direction(input_event_direction_t input_event_
 	}
 }
 
+void base_game_handle_input_event_letter_key(char letter)
+{
+	switch (letter)
+	{
+		case 'i':
+			push_game_state(internals_menu_game_state);
+		break;
+	}
+}
+
 void base_game_handle_input_event_debugging_letter_key(char letter)
 {
 	switch (letter)
@@ -821,6 +919,8 @@ game_state_t base_game_state = {
 		base_game_state_draw_layer,
 	.handle_input_event_direction =
 		base_game_handle_input_event_direction,
+	.handle_input_event_letter_key =
+		base_game_handle_input_event_letter_key,
 	.handle_input_event_debugging_letter_key =
 		base_game_handle_input_event_debugging_letter_key};
 
