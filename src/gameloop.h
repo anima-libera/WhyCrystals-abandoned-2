@@ -25,6 +25,11 @@ typedef struct game_state_t game_state_t;
 void push_game_state(game_state_t game_state);
 void pop_game_state(void);
 
+/* Has the player spawned and stuff be displayed to the user ? */
+extern bool g_game_has_started;
+
+extern int g_turn_number;
+
 /* Time since the beginning of the game loop, in milliseconds. */
 extern int g_game_time;
 

@@ -1,15 +1,8 @@
 
-#ifndef WHYCRYSTALS_HEADER_GAME_
-#define WHYCRYSTALS_HEADER_GAME_
+#ifndef WHYCRYSTALS_HEADER_MATERIALS_
+#define WHYCRYSTALS_HEADER_MATERIALS_
 
 #include "rendering.h"
-
-/* Has the player spawned and stuff be displayed to the user ? */
-extern bool g_game_has_started;
-
-extern int g_turn_number;
-
-/* Section `material_t`. */
 
 enum material_type_t
 {
@@ -41,4 +34,4 @@ material_t* get_material(material_id_t id);
 
 material_id_t rand_material(material_type_t type);
 
-#endif /* WHYCRYSTALS_HEADER_GAME_ */
+#endif /* WHYCRYSTALS_HEADER_MATERIALS_ */

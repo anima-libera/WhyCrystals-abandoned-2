@@ -2,7 +2,6 @@
 #include "gameloop.h"
 #include "utils.h"
 #include "rendering.h"
-#include "game.h"
 #include <stdlib.h>
 #include <stdbool.h>
 #include <SDL2/SDL.h>
@@ -34,6 +33,8 @@ game_state_t* top_game_state(void)
 	}
 }
 
+bool g_game_has_started = false;
+int g_turn_number = 0;
 int g_game_time = 0;
 int g_fps_in_some_recent_iteration = 0;
 

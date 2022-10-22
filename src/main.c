@@ -5,7 +5,7 @@
 #include "mapgrid.h"
 #include "rendering.h"
 #include "log.h"
-#include "game.h"
+#include "materials.h"
 #include "generators.h"
 #include "tc.h"
 #include "laws.h"

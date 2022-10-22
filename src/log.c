@@ -2,7 +2,6 @@
 #include "log.h"
 #include "rendering.h"
 #include "utils.h"
-#include "game.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 

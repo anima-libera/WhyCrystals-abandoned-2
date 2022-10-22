@@ -4,7 +4,7 @@
 
 #include "tc.h"
 #include "rendering.h"
-#include "game.h"
+#include "materials.h"
 #include <stdbool.h>
 
 /* Section `oid_t`. */
