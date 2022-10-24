@@ -1,7 +1,7 @@
 
 # Why Crystals ?
 
-NOTE: This project continues, but in Rust, (there)[https://github.com/anima-libera/why-crystals].
+NOTE: This project continues, but in Rust, [there](https://github.com/anima-libera/why-crystals).
 
 This is a wannabe roguelike-like-lite-thingy game with focus on procedural jungle stuff and all.
 
